@@ -4,11 +4,11 @@ namespace Farsight.Common;
 
 public static class FarsightCommonRegistry
 {
-    private static readonly List<Action<IHostApplicationBuilder>> _registrationActions = new();
+    private static readonly List<Action<IHostApplicationBuilder>> _registrationActions = [];
 
     public static void Register(Action<IHostApplicationBuilder> action)
     {
-        lock (_registrationActions)
+        lock(_registrationActions)
         {
             _registrationActions.Add(action);
         }
@@ -17,12 +17,12 @@ public static class FarsightCommonRegistry
     public static void Apply(IHostApplicationBuilder builder)
     {
         Action<IHostApplicationBuilder>[] actions;
-        lock (_registrationActions)
+        lock(_registrationActions)
         {
-            actions = _registrationActions.ToArray();
+            actions = [.. _registrationActions];
         }
 
-        foreach (var action in actions)
+        foreach(var action in actions)
         {
             action(builder);
         }
