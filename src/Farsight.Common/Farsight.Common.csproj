@@ -14,19 +14,25 @@
 		<Title>Farsight.Common</Title>
 		<Authors>Playwo</Authors>
 		<Description>A library including a source generator with common utilities used by Farsight.</Description>
-		<Version>0.9.0-beta</Version>
+		<Version>0.9.1-beta</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Farsight.Common.SharedTypes\Farsight.Common.SharedTypes.csproj" PrivateAssets="all" />
+
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" GeneratePathProperty="true" />
+		
 		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
 		<PackageReference Include="Polyfill" Version="9.8.1" PrivateAssets="all" />
-		<ProjectReference Include="..\Farsight.Common.SharedTypes\Farsight.Common.SharedTypes.csproj" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
+
+		<None Include="$(PkgMicrosoft_Extensions_Hosting_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Hosting.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>
+
 </Project>

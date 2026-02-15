@@ -1,3 +1,4 @@
+using Farsight.Common.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -7,7 +8,7 @@ using System.Text;
 namespace Farsight.Common;
 
 [Generator]
-public class ConfigOptionSourceGenerator : IIncrementalGenerator
+public class ApplicationConfigurationGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -33,6 +34,7 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
             static (spc, source) => Execute(source.Left, source.Right, spc));
     }
 
+    internal record struct ConfigOptionModel(string FullName, string? SectionName);
     private static ConfigOptionModel? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
     {
         var classDeclarationSyntax = (ClassDeclarationSyntax) context.Node;
@@ -60,6 +62,12 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
         return new ConfigOptionModel(symbol.ToDisplayString(), sectionName);
     }
 
+    internal record struct InjectedFieldModel(string TypeFullName, string Name);
+    internal record struct SingletonModel(
+        INamedTypeSymbol TypeSymbol,
+        ImmutableArray<InjectedFieldModel> InjectedFields,
+        ImmutableArray<Diagnostic> Diagnostics
+    );
     private static SingletonModel? GetSingletonSemanticTarget(GeneratorSyntaxContext context)
     {
         var classDeclarationSyntax = (ClassDeclarationSyntax) context.Node;
@@ -85,20 +93,15 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
             return null;
         }
 
-        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
-        bool isValid = true;
+        var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
 
         if(!classDeclarationSyntax.Modifiers.Any(m => m.ValueText == "partial"))
         {
-            diagnostics.Add(new DiagnosticInfo(
-                DiagnosticDescriptors.PartialClassRequired.Id,
-                DiagnosticDescriptors.PartialClassRequired.Title.ToString(),
-                DiagnosticDescriptors.PartialClassRequired.MessageFormat.ToString(),
-                DiagnosticDescriptors.PartialClassRequired.Category,
-                DiagnosticDescriptors.PartialClassRequired.DefaultSeverity,
+            diagnostics.Add(Diagnostic.Create(
+                DiagnosticsCatalogue.PartialClassRequired,
                 classDeclarationSyntax.Identifier.GetLocation(),
-                [symbol.Name]));
-            isValid = false;
+                [symbol.Name]
+            ));
         }
 
         var injectedFields = ImmutableArray.CreateBuilder<InjectedFieldModel>();
@@ -111,15 +114,11 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
             {
                 if(member.DeclaredAccessibility != Accessibility.Private || !member.IsReadOnly)
                 {
-                    diagnostics.Add(new DiagnosticInfo(
-                        DiagnosticDescriptors.PrivateReadonlyRequired.Id,
-                        DiagnosticDescriptors.PrivateReadonlyRequired.Title.ToString(),
-                        DiagnosticDescriptors.PrivateReadonlyRequired.MessageFormat.ToString(),
-                        DiagnosticDescriptors.PrivateReadonlyRequired.Category,
-                        DiagnosticDescriptors.PrivateReadonlyRequired.DefaultSeverity,
+                    diagnostics.Add(Diagnostic.Create(
+                        DiagnosticsCatalogue.PrivateReadonlyRequired,
                         member.Locations[0],
-                        [member.Name, symbol.Name]));
-                    isValid = false;
+                        [member.Name, symbol.Name]
+                    ));
                 }
                 else
                 {
@@ -129,12 +128,9 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
         }
 
         return new SingletonModel(
-            symbol.ToDisplayString(),
-            symbol.Name,
-            symbol.ContainingNamespace.ToDisplayString(),
+            symbol,
             injectedFields.ToImmutable(),
-            diagnostics.ToImmutable(),
-            isValid
+            diagnostics.ToImmutable()
         );
     }
 
@@ -144,33 +140,34 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
 
         foreach(var classOption in configOptions.Distinct())
         {
-            string fullName = classOption.FullName;
-            string binding = String.IsNullOrWhiteSpace(classOption.SectionName)
+            string configSection = String.IsNullOrWhiteSpace(classOption.SectionName)
                 ? "builder.Configuration"
                 : $"""builder.Configuration.GetSection("{classOption.SectionName}")""";
 
-            registrations.AppendLine(Indent($"""
-                builder.Services.AddOptionsWithValidateOnStart<{fullName}>()
-                    .Bind({binding})
+            registrations.AppendLine(
+                $"""
+                builder.Services.AddOptionsWithValidateOnStart<{classOption.FullName}>()
+                    .Bind({configSection})
                     .ValidateDataAnnotations();
-                """, 16));
+                """
+            );
         }
 
         foreach(var singleton in singletons.Distinct())
         {
-            foreach(var diagInfo in singleton.Diagnostics)
+            foreach(var diagnostic in singleton.Diagnostics)
             {
-                var descriptor = new DiagnosticDescriptor(diagInfo.Id, diagInfo.Title, diagInfo.MessageFormat, diagInfo.Category, diagInfo.Severity, true);
-                context.ReportDiagnostic(Diagnostic.Create(descriptor, diagInfo.Location, diagInfo.Args));
+                context.ReportDiagnostic(diagnostic);
             }
 
-            if(!singleton.IsValid)
+            if(singleton.Diagnostics.Length > 0)
             {
                 continue;
             }
 
-            string fullName = singleton.FullName;
-            registrations.AppendLine(Indent($"""builder.Services.AddSingleton<{fullName}>();""", 16));
+            registrations.AppendLine(
+                $"""builder.Services.AddSingleton<{singleton.TypeSymbol.ToDisplayString()}>();"""
+            );
 
             GeneratePaddingConstructor(singleton, context);
         }
@@ -195,7 +192,7 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
                 {
                     {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.Register)}}(builder =>
                     {
-            {{registrations}}
+            {{CodeUtils.Indent(registrations.ToString(), 12)}}
                     });
                 }
             }
@@ -207,12 +204,12 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
     private static void GeneratePaddingConstructor(SingletonModel singleton, SourceProductionContext context)
     {
         var fields = singleton.InjectedFields;
-        string className = singleton.Name;
 
         var parametersList = new List<string>
         {
             "System.IServiceProvider provider",
-            $"Microsoft.Extensions.Logging.ILogger<{className}> logger"
+            $"Microsoft.Extensions.Logging.ILogger<{singleton.TypeSymbol.Name}> logger",
+            "Microsoft.Extensions.Hosting.IHostApplicationLifetime lifetime"
         };
         parametersList.AddRange(fields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
         string parameters = String.Join(", ", parametersList);
@@ -220,34 +217,22 @@ public class ConfigOptionSourceGenerator : IIncrementalGenerator
         var assignments = new StringBuilder();
         foreach(var field in fields)
         {
-            assignments.AppendLine(Indent($"this.{field.Name} = {field.Name.TrimStart('_')};", 12));
+            assignments.AppendLine($"this.{field.Name} = {field.Name.TrimStart('_')};");
         }
 
-        string namespaceName = singleton.Namespace;
         string source = $$"""
-            namespace {{namespaceName}}
+            namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
             {
-                partial class {{className}}
+                partial sealed class {{singleton.TypeSymbol.Name}}
                 {
-                    public {{className}}({{parameters}}) : base(provider, logger)
+                    public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
                     {
-            {{assignments}}
+            {{CodeUtils.Indent(assignments.ToString(), 12)}}
                     }
                 }
             }
             """;
 
-        context.AddSource($"{className}.g.cs", SourceText.From(source, Encoding.UTF8));
-    }
-
-    private static string Indent(string text, int spaces)
-    {
-        string indentation = new string(' ', spaces);
-        return String.Join("\n", text.Split(["\r\n", "\n"], StringSplitOptions.None)
-            .Select(line => String.IsNullOrWhiteSpace(line)
-                ? line
-                : indentation + line
-            )
-        );
+        context.AddSource($"{singleton.TypeSymbol.Name}.g.cs", SourceText.From(source, Encoding.UTF8));
     }
 }

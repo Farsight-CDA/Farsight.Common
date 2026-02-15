@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Dependencies.props" />
+  </Folder>
   <Project Path="src/Farsight.Common.SharedTypes/Farsight.Common.SharedTypes.csproj" Id="4063343d-6237-401d-9c91-cc590dce367a" />
   <Project Path="src/Farsight.Common/Farsight.Common.csproj" />
 </Solution>
