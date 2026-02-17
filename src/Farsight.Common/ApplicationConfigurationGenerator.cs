@@ -1,4 +1,5 @@
 using Farsight.Common.Diagnostics;
+using Farsight.Common.Startup;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -66,7 +67,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     internal record struct SingletonModel(
         INamedTypeSymbol TypeSymbol,
         ImmutableArray<InjectedFieldModel> InjectedFields,
-        ImmutableArray<Diagnostic> Diagnostics
+        ImmutableArray<Diagnostic> Diagnostics,
+        bool IsStartup
     );
     private static SingletonModel? GetSingletonSemanticTarget(GeneratorSyntaxContext context)
     {
@@ -77,18 +79,27 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         var baseType = symbol.BaseType;
-        bool inheritsFromSingleton = false;
+        bool isSingleton = false;
+        bool isStartup = false;
+
         while(baseType is not null)
         {
-            if(baseType.ToDisplayString() == typeof(Singleton).FullName)
+            string baseTypeString = baseType.ToDisplayString();
+            if(baseTypeString == typeof(Singleton).FullName)
             {
-                inheritsFromSingleton = true;
+                isSingleton = true;
                 break;
             }
+            if(baseTypeString == typeof(FarsightStartup).FullName)
+            {
+                isStartup = true;
+                break;
+            }
+
             baseType = baseType.BaseType;
         }
 
-        if(!inheritsFromSingleton)
+        if(!isSingleton && !isStartup)
         {
             return null;
         }
@@ -105,6 +116,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         var injectedFields = ImmutableArray.CreateBuilder<InjectedFieldModel>();
+
         foreach(var member in symbol.GetMembers().OfType<IFieldSymbol>())
         {
             var injectAttr = member.GetAttributes()
@@ -130,7 +142,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         return new SingletonModel(
             symbol,
             injectedFields.ToImmutable(),
-            diagnostics.ToImmutable()
+            diagnostics.ToImmutable(),
+            isStartup
         );
     }
 
@@ -145,10 +158,12 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 : $"""builder.Configuration.GetSection("{classOption.SectionName}")""";
 
             registrations.AppendLine(
-                $"""
-                builder.Services.AddOptionsWithValidateOnStart<{classOption.FullName}>()
-                    .Bind({configSection})
+                $$"""
+                builder.Services.AddOptionsWithValidateOnStart<{{classOption.FullName}}>()
+                    .Bind({{configSection}})
                     .ValidateDataAnnotations();
+                builder.Services.AddSingleton<{{classOption.FullName}}>(
+                    provider => provider.GetService<Microsoft.Extensions.Options.IOptions<{{classOption.FullName}}>>().Value);
                 """
             );
         }
@@ -165,9 +180,20 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 continue;
             }
 
+            string serviceName = singleton.TypeSymbol.ToDisplayString();
             registrations.AppendLine(
-                $"""builder.Services.AddSingleton<{singleton.TypeSymbol.ToDisplayString()}>();"""
+                $"""
+                builder.Services.AddSingleton<{serviceName}>();
+                """
             );
+
+            if(!singleton.IsStartup)
+            {
+                registrations.AppendLine(
+                    $"""
+                    builder.Services.AddSingleton<Singleton, {serviceName}>(provider => provider.GetService<{serviceName}>());
+                    """);
+            }
 
             GeneratePaddingConstructor(singleton, context);
         }
@@ -223,7 +249,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         string source = $$"""
             namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
             {
-                partial sealed class {{singleton.TypeSymbol.Name}}
+                sealed partial class {{singleton.TypeSymbol.Name}}
                 {
                     public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
                     {
