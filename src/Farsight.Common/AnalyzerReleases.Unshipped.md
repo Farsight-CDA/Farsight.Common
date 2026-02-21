@@ -5,5 +5,3 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
-FC003 | Usage | Error | DiagnosticsCatalogue
-FC004 | Usage | Error | DiagnosticsCatalogue

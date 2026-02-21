@@ -14,7 +14,7 @@
 		<Title>Farsight.Common</Title>
 		<Authors>Playwo</Authors>
 		<Description>A library including a source generator with common utilities used by Farsight.</Description>
-		<Version>0.9.1-beta</Version>
+		<Version>0.9.2-beta</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
