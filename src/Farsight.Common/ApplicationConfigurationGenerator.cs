@@ -143,12 +143,17 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         foreach(var attributeData in symbol.GetAttributes())
         {
-            if(attributeData.AttributeClass?.ToDisplayString() != typeof(ServiceTypeAttribute<>).FullName)
+            if(attributeData.AttributeClass is not INamedTypeSymbol
+               {
+                   Name: nameof(ServiceTypeAttribute<object>),
+                   Arity: 1
+               } attributeClass
+               || attributeClass.ContainingNamespace.ToDisplayString() != typeof(ServiceTypeAttribute<>).Namespace)
             {
                 continue;
             }
 
-            if(attributeData.AttributeClass is not INamedTypeSymbol { TypeArguments.Length: 1 } attributeClass)
+            if(attributeClass.TypeArguments.Length != 1)
             {
                 continue;
             }
