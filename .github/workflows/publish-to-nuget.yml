@@ -20,15 +20,16 @@ jobs:
           dotnet-version: "10.x"
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore Farsight.Common.slnx
 
       - name: Build the project
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build Farsight.Common.slnx --configuration Release --no-restore -warnaserror
 
       - name: Pack the project
         run: dotnet pack src/Farsight.Common --configuration Release --no-build --output ./nupkgs
 
       - name: Publish to NuGet
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key $NUGET_API_KEY --skip-duplicate
+          API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: bash
+        run: dotnet nuget push ./nupkgs/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$API_KEY" --skip-duplicate
