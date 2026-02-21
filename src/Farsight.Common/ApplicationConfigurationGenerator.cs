@@ -168,7 +168,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             );
         }
 
-        foreach(var singleton in singletons.Distinct())
+        foreach(var singleton in GetUniqueSingletons(singletons))
         {
             foreach(var diagnostic in singleton.Diagnostics)
             {
@@ -259,6 +259,44 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             }
             """;
 
-        context.AddSource($"{singleton.TypeSymbol.Name}.g.cs", SourceText.From(source, Encoding.UTF8));
+        string hintName = BuildSingletonHintName(singleton.TypeSymbol);
+        context.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
+    }
+
+    private static IEnumerable<SingletonModel> GetUniqueSingletons(ImmutableArray<SingletonModel> singletons)
+    {
+        var uniqueSingletons = new Dictionary<INamedTypeSymbol, SingletonModel>(SymbolEqualityComparer.Default);
+
+        foreach(var singleton in singletons)
+        {
+            if(uniqueSingletons.TryGetValue(singleton.TypeSymbol, out var existing))
+            {
+                var merged = existing with
+                {
+                    InjectedFields = existing.InjectedFields.Concat(singleton.InjectedFields).Distinct().ToImmutableArray(),
+                    Diagnostics = existing.Diagnostics.Concat(singleton.Diagnostics).ToImmutableArray()
+                };
+                uniqueSingletons[singleton.TypeSymbol] = merged;
+                continue;
+            }
+
+            uniqueSingletons[singleton.TypeSymbol] = singleton;
+        }
+
+        return uniqueSingletons.Values;
+    }
+
+    private static string BuildSingletonHintName(INamedTypeSymbol typeSymbol)
+    {
+        string typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var hintNameBuilder = new StringBuilder(typeName.Length + 5);
+
+        foreach(char character in typeName)
+        {
+            hintNameBuilder.Append(Char.IsLetterOrDigit(character) || character == '_' ? character : '_');
+        }
+
+        hintNameBuilder.Append(".g.cs");
+        return hintNameBuilder.ToString();
     }
 }
