@@ -2,8 +2,6 @@ name: Publish to Private Feed
 
 on:
   push:
-    branches-ignore:
-      - main
   workflow_dispatch:
 
 jobs:
