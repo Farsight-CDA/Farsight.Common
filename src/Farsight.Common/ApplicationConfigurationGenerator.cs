@@ -67,6 +67,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     internal record struct SingletonModel(
         INamedTypeSymbol TypeSymbol,
         ImmutableArray<InjectedFieldModel> InjectedFields,
+        ImmutableArray<ITypeSymbol> ServiceTypes,
         ImmutableArray<Diagnostic> Diagnostics,
         bool IsStartup
     );
@@ -105,6 +106,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+        var serviceTypes = ImmutableArray.CreateBuilder<ITypeSymbol>();
 
         if(!classDeclarationSyntax.Modifiers.Any(m => m.ValueText == "partial"))
         {
@@ -139,9 +141,49 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             }
         }
 
+        foreach(var attributeData in symbol.GetAttributes())
+        {
+            if(attributeData.AttributeClass?.ToDisplayString() != typeof(ServiceTypeAttribute<>).FullName)
+            {
+                continue;
+            }
+
+            if(attributeData.AttributeClass is not INamedTypeSymbol { TypeArguments.Length: 1 } attributeClass)
+            {
+                continue;
+            }
+
+            var serviceType = attributeClass.TypeArguments[0];
+            if(serviceType.TypeKind != TypeKind.Interface)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    DiagnosticsCatalogue.ServiceTypeMustBeInterface,
+                    classDeclarationSyntax.Identifier.GetLocation(),
+                    [serviceType.ToDisplayString(), symbol.Name]
+                ));
+                continue;
+            }
+
+            bool implementsServiceType = symbol.AllInterfaces
+                .Any(singletonInterface => SymbolEqualityComparer.Default.Equals(singletonInterface, serviceType));
+
+            if(!implementsServiceType)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    DiagnosticsCatalogue.ServiceTypeNotImplemented,
+                    classDeclarationSyntax.Identifier.GetLocation(),
+                    [symbol.Name, serviceType.ToDisplayString()]
+                ));
+                continue;
+            }
+
+            serviceTypes.Add(serviceType);
+        }
+
         return new SingletonModel(
             symbol,
             injectedFields.ToImmutable(),
+            DistinctServiceTypes(serviceTypes),
             diagnostics.ToImmutable(),
             isStartup
         );
@@ -192,6 +234,15 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 registrations.AppendLine(
                     $"""
                     builder.Services.AddSingleton<Singleton, {serviceName}>(provider => provider.GetService<{serviceName}>());
+                    """);
+            }
+
+            foreach(var serviceType in singleton.ServiceTypes)
+            {
+                string serviceTypeName = serviceType.ToDisplayString();
+                registrations.AppendLine(
+                    $"""
+                    builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => provider.GetService<{serviceName}>());
                     """);
             }
 
@@ -274,6 +325,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 var merged = existing with
                 {
                     InjectedFields = existing.InjectedFields.Concat(singleton.InjectedFields).Distinct().ToImmutableArray(),
+                    ServiceTypes = DistinctServiceTypes(existing.ServiceTypes.Concat(singleton.ServiceTypes)),
                     Diagnostics = existing.Diagnostics.Concat(singleton.Diagnostics).ToImmutableArray()
                 };
                 uniqueSingletons[singleton.TypeSymbol] = merged;
@@ -298,5 +350,21 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         hintNameBuilder.Append(".g.cs");
         return hintNameBuilder.ToString();
+    }
+
+    private static ImmutableArray<ITypeSymbol> DistinctServiceTypes(IEnumerable<ITypeSymbol> serviceTypes)
+    {
+        var uniqueServiceTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var serviceTypeBuilder = ImmutableArray.CreateBuilder<ITypeSymbol>();
+
+        foreach(var serviceType in serviceTypes)
+        {
+            if(uniqueServiceTypes.Add(serviceType))
+            {
+                serviceTypeBuilder.Add(serviceType);
+            }
+        }
+
+        return serviceTypeBuilder.ToImmutable();
     }
 }
