@@ -31,6 +31,7 @@
 		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
+		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.xml" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
 
 		<None Include="$(PkgMicrosoft_Extensions_Hosting_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Hosting.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>

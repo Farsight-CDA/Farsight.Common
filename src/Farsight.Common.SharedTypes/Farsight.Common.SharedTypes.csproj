@@ -5,6 +5,7 @@
 		<Nullable>enable</Nullable>
 		<RootNamespace>Farsight.Common</RootNamespace>
 		<LangVersion>latest</LangVersion>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<ItemGroup>

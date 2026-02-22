@@ -8,9 +8,16 @@ using System.Text;
 
 namespace Farsight.Common;
 
+/// <summary>
+/// Discovers Farsight configuration and singleton patterns and emits registration code.
+/// </summary>
 [Generator]
 public class ApplicationConfigurationGenerator : IIncrementalGenerator
 {
+    /// <summary>
+    /// Configures the incremental pipelines used by this generator.
+    /// </summary>
+    /// <param name="context">The generator initialization context.</param>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var configOptions = context.SyntaxProvider

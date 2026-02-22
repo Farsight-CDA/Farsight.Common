@@ -2,14 +2,25 @@ using Microsoft.Extensions.Hosting;
 
 namespace Farsight.Common;
 
+/// <summary>
+/// Stores source-generated registration actions and applies them to a host builder.
+/// </summary>
 public static class FarsightCommonRegistry
 {
     private static readonly List<Action<IHostApplicationBuilder>> _optionRegistrationActions = [];
     private static readonly List<Action<IHostApplicationBuilder>> _serviceRegistrationActions = [];
 
+    /// <summary>
+    /// Registers service-related generated actions.
+    /// </summary>
+    /// <param name="action">The registration action to store.</param>
     public static void Register(Action<IHostApplicationBuilder> action)
         => RegisterServices(action);
 
+    /// <summary>
+    /// Registers options-related generated actions.
+    /// </summary>
+    /// <param name="action">The registration action to store.</param>
     public static void RegisterOptions(Action<IHostApplicationBuilder> action)
     {
         lock(_optionRegistrationActions)
@@ -18,6 +29,10 @@ public static class FarsightCommonRegistry
         }
     }
 
+    /// <summary>
+    /// Registers service-related generated actions.
+    /// </summary>
+    /// <param name="action">The registration action to store.</param>
     public static void RegisterServices(Action<IHostApplicationBuilder> action)
     {
         lock(_serviceRegistrationActions)
@@ -26,12 +41,24 @@ public static class FarsightCommonRegistry
         }
     }
 
+    /// <summary>
+    /// Applies only options registrations to the host builder.
+    /// </summary>
+    /// <param name="builder">The host builder receiving registrations.</param>
     public static void ApplyOptions(IHostApplicationBuilder builder)
         => Apply(_optionRegistrationActions, builder);
 
+    /// <summary>
+    /// Applies only service registrations to the host builder.
+    /// </summary>
+    /// <param name="builder">The host builder receiving registrations.</param>
     public static void ApplyServices(IHostApplicationBuilder builder)
         => Apply(_serviceRegistrationActions, builder);
 
+    /// <summary>
+    /// Applies options and service registrations to the host builder.
+    /// </summary>
+    /// <param name="builder">The host builder receiving registrations.</param>
     public static void Apply(IHostApplicationBuilder builder)
     {
         ApplyOptions(builder);
