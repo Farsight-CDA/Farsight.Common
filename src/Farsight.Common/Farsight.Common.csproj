@@ -14,6 +14,7 @@
 		<Title>Farsight.Common</Title>
 		<Authors>Playwo</Authors>
 		<Description>A library including a source generator with common utilities used by Farsight.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Version>0.9.2-beta</Version>
 	</PropertyGroup>
 
@@ -32,6 +33,7 @@
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
 		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.xml" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="true" />
 
 		<None Include="$(PkgMicrosoft_Extensions_Hosting_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Hosting.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>
