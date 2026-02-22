@@ -10,7 +10,7 @@
 - Discovers classes annotated with `[ConfigOption]` and registers them with options binding + validation.
 - Discovers classes inheriting `Singleton` (and `FarsightStartup`) and auto-registers them in DI.
 - Generates constructor injection for `[Inject]` private readonly fields in `Singleton`/`FarsightStartup` classes.
-- Applies generated registrations when `AddApplication<TStartup>()` is called.
+- Applies generated registrations when `AddApplication<TStartup>()` or `AddApplicationOptions()` is called.
 
 ## Installation
 
@@ -35,7 +35,15 @@ await builder.Build().RunAsync();
 What this does:
 
 - Adds your startup type (`TStartup`) as a hosted lifecycle service.
-- Applies all source-generated registrations collected in `FarsightCommonRegistry`.
+- Applies all source-generated options and service registrations collected in `FarsightCommonRegistry`.
+
+If you need configuration binding during design-time only (for example EF tooling), use:
+
+```csharp
+builder.AddApplicationOptions();
+```
+
+This applies only `[ConfigOption]` registrations and skips singleton/service registrations.
 
 Without this call, discovered `Singleton` and `[ConfigOption]` types will not be applied to DI/options.
 

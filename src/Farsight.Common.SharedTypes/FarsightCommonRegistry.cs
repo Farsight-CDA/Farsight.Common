@@ -4,22 +4,46 @@ namespace Farsight.Common;
 
 public static class FarsightCommonRegistry
 {
-    private static readonly List<Action<IHostApplicationBuilder>> _registrationActions = [];
+    private static readonly List<Action<IHostApplicationBuilder>> _optionRegistrationActions = [];
+    private static readonly List<Action<IHostApplicationBuilder>> _serviceRegistrationActions = [];
 
     public static void Register(Action<IHostApplicationBuilder> action)
+        => RegisterServices(action);
+
+    public static void RegisterOptions(Action<IHostApplicationBuilder> action)
     {
-        lock(_registrationActions)
+        lock(_optionRegistrationActions)
         {
-            _registrationActions.Add(action);
+            _optionRegistrationActions.Add(action);
         }
     }
 
+    public static void RegisterServices(Action<IHostApplicationBuilder> action)
+    {
+        lock(_serviceRegistrationActions)
+        {
+            _serviceRegistrationActions.Add(action);
+        }
+    }
+
+    public static void ApplyOptions(IHostApplicationBuilder builder)
+        => Apply(_optionRegistrationActions, builder);
+
+    public static void ApplyServices(IHostApplicationBuilder builder)
+        => Apply(_serviceRegistrationActions, builder);
+
     public static void Apply(IHostApplicationBuilder builder)
     {
+        ApplyOptions(builder);
+        ApplyServices(builder);
+    }
+
+    private static void Apply(List<Action<IHostApplicationBuilder>> registrationActions, IHostApplicationBuilder builder)
+    {
         Action<IHostApplicationBuilder>[] actions;
-        lock(_registrationActions)
+        lock(registrationActions)
         {
-            actions = [.. _registrationActions];
+            actions = [.. registrationActions];
         }
 
         foreach(var action in actions)

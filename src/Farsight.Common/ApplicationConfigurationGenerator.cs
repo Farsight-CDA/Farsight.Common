@@ -196,7 +196,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
     private static void Execute(ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
     {
-        var registrations = new StringBuilder();
+        var optionRegistrations = new StringBuilder();
+        var serviceRegistrations = new StringBuilder();
 
         foreach(var classOption in configOptions.Distinct())
         {
@@ -204,7 +205,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 ? "builder.Configuration"
                 : $"""builder.Configuration.GetSection("{classOption.SectionName}")""";
 
-            registrations.AppendLine(
+            optionRegistrations.AppendLine(
                 $$"""
                 builder.Services.AddOptionsWithValidateOnStart<{{classOption.FullName}}>()
                     .Bind({{configSection}})
@@ -228,7 +229,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             }
 
             string serviceName = singleton.TypeSymbol.ToDisplayString();
-            registrations.AppendLine(
+            serviceRegistrations.AppendLine(
                 $"""
                 builder.Services.AddSingleton<{serviceName}>();
                 """
@@ -236,7 +237,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
             if(!singleton.IsStartup)
             {
-                registrations.AppendLine(
+                serviceRegistrations.AppendLine(
                     $"""
                     builder.Services.AddSingleton<Singleton, {serviceName}>(provider => provider.GetService<{serviceName}>());
                     """);
@@ -245,7 +246,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             foreach(var serviceType in singleton.ServiceTypes)
             {
                 string serviceTypeName = serviceType.ToDisplayString();
-                registrations.AppendLine(
+                serviceRegistrations.AppendLine(
                     $"""
                     builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => provider.GetService<{serviceName}>());
                     """);
@@ -254,9 +255,34 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             GeneratePaddingConstructor(singleton, context);
         }
 
-        if(registrations.Length == 0)
+        if(optionRegistrations.Length == 0 && serviceRegistrations.Length == 0)
         {
             return;
+        }
+
+        var registrationCalls = new StringBuilder();
+        if(optionRegistrations.Length > 0)
+        {
+            registrationCalls.AppendLine(
+                $$"""
+                {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.RegisterOptions)}}(builder =>
+                {
+                {{CodeUtils.Indent(optionRegistrations.ToString(), 16)}}
+                });
+                """
+            );
+        }
+
+        if(serviceRegistrations.Length > 0)
+        {
+            registrationCalls.AppendLine(
+                $$"""
+                {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.RegisterServices)}}(builder =>
+                {
+                {{CodeUtils.Indent(serviceRegistrations.ToString(), 16)}}
+                });
+                """
+            );
         }
 
         string source = $$"""
@@ -272,10 +298,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 [ModuleInitializer]
                 internal static void Initialize()
                 {
-                    {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.Register)}}(builder =>
-                    {
-            {{CodeUtils.Indent(registrations.ToString(), 12)}}
-                    });
+            {{CodeUtils.Indent(registrationCalls.ToString(), 8)}}
                 }
             }
             """;

@@ -10,7 +10,14 @@ public static class IHostApplicationBuilderExtensions
         where TStartup : FarsightStartup
     {
         builder.Services.AddHostedService<TStartup>();
-        FarsightCommonRegistry.Apply(builder);
+        builder.AddApplicationOptions();
+        FarsightCommonRegistry.ApplyServices(builder);
+        return builder;
+    }
+
+    public static IHostApplicationBuilder AddApplicationOptions(this IHostApplicationBuilder builder)
+    {
+        FarsightCommonRegistry.ApplyOptions(builder);
         return builder;
     }
 }
