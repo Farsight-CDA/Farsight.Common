@@ -37,9 +37,10 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             .Collect();
 
         var combined = configOptions.Combine(singletons);
+        var generationInput = context.CompilationProvider.Combine(combined);
 
-        context.RegisterSourceOutput(combined,
-            static (spc, source) => Execute(source.Left, source.Right, spc));
+        context.RegisterSourceOutput(generationInput,
+            static (spc, source) => Execute(source.Left, source.Right.Left, source.Right.Right, spc));
     }
 
     internal record struct ConfigOptionModel(string FullName, string? SectionName);
@@ -150,11 +151,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         foreach(var attributeData in symbol.GetAttributes())
         {
-            if(attributeData.AttributeClass is not INamedTypeSymbol
-               {
-                   Name: nameof(ServiceTypeAttribute<object>),
-                   Arity: 1
-               } attributeClass
+            if(attributeData.AttributeClass is not INamedTypeSymbol { Name: nameof(ServiceTypeAttribute<object>), Arity: 1 } attributeClass
                || attributeClass.ContainingNamespace.ToDisplayString() != typeof(ServiceTypeAttribute<>).Namespace)
             {
                 continue;
@@ -201,7 +198,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         );
     }
 
-    private static void Execute(ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
+    private static void Execute(Compilation compilation, ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
     {
         var optionRegistrations = new StringBuilder();
         var serviceRegistrations = new StringBuilder();
@@ -262,11 +259,6 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             GeneratePaddingConstructor(singleton, context);
         }
 
-        if(optionRegistrations.Length == 0 && serviceRegistrations.Length == 0)
-        {
-            return;
-        }
-
         var registrationCalls = new StringBuilder();
         if(optionRegistrations.Length > 0)
         {
@@ -292,25 +284,103 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             );
         }
 
-        string source = $$"""
+        bool hasLocalRegistrations = registrationCalls.Length > 0;
+        if(hasLocalRegistrations)
+        {
+            string registrarSource = $$"""
+                using Microsoft.Extensions.DependencyInjection;
+                using Microsoft.Extensions.Hosting;
+                using Microsoft.Extensions.Configuration;
+
+                [assembly: global::Farsight.Common.FarsightRegistrarAttribute<global::Farsight.Common.Generated.FarsightRegistrar>]
+
+                namespace Farsight.Common.Generated;
+                public static class FarsightRegistrar
+                {
+                    private static int _isRegistered;
+
+                    public static void Register()
+                    {
+                        if(global::System.Threading.Interlocked.Exchange(ref _isRegistered, 1) == 1)
+                        {
+                            return;
+                        }
+
+                {{CodeUtils.Indent(registrationCalls.ToString(), 8)}}
+                    }
+                }
+                """;
+
+            context.AddSource("FarsightCommonRegistrar.g.cs", SourceText.From(registrarSource, Encoding.UTF8));
+        }
+
+        var registrarCalls = new List<string>();
+        if(hasLocalRegistrations)
+        {
+            registrarCalls.Add("global::Farsight.Common.Generated.FarsightRegistrar.Register();");
+        }
+
+        registrarCalls.AddRange(GetReferencedRegistrarCalls(compilation));
+
+        if(registrarCalls.Count == 0)
+        {
+            return;
+        }
+
+        string bootstrapSource = $$"""
             using System.Runtime.CompilerServices;
-            using Microsoft.Extensions.DependencyInjection;
-            using Microsoft.Extensions.Hosting;
-            using Microsoft.Extensions.Configuration;
-            using Farsight.Common;
 
             namespace Farsight.Common.Generated;
-            internal static class FarsightCommonInitializer
+            internal static class FarsightBootstrapInitializer
             {
                 [ModuleInitializer]
                 internal static void Initialize()
                 {
-            {{CodeUtils.Indent(registrationCalls.ToString(), 8)}}
+            {{CodeUtils.Indent(string.Join("\n", registrarCalls), 8)}}
                 }
             }
             """;
 
-        context.AddSource("FarsightCommonInitializer.g.cs", SourceText.From(source, Encoding.UTF8));
+        context.AddSource("FarsightBootstrapInitializer.g.cs", SourceText.From(bootstrapSource, Encoding.UTF8));
+    }
+
+    private static IEnumerable<string> GetReferencedRegistrarCalls(Compilation compilation)
+    {
+        var attributeType = compilation.GetTypeByMetadataName(typeof(FarsightRegistrarAttribute<>).FullName!);
+        if(attributeType is null)
+        {
+            return [];
+        }
+
+        var registrarTypes = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach(var assemblySymbol in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            foreach(var attribute in assemblySymbol.GetAttributes())
+            {
+                if(attribute.AttributeClass is not INamedTypeSymbol attributeClass
+                   || !SymbolEqualityComparer.Default.Equals(attributeClass.ConstructedFrom, attributeType))
+                {
+                    continue;
+                }
+
+                if(attributeClass.TypeArguments.Length != 1)
+                {
+                    continue;
+                }
+
+                if(attributeClass.TypeArguments[0] is not INamedTypeSymbol registrarType)
+                {
+                    continue;
+                }
+
+                registrarTypes.Add(registrarType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+            }
+        }
+
+        return registrarTypes
+            .OrderBy(typeName => typeName, StringComparer.Ordinal)
+            .Select(typeName => $"{typeName}.Register();");
     }
 
     private static void GeneratePaddingConstructor(SingletonModel singleton, SourceProductionContext context)
