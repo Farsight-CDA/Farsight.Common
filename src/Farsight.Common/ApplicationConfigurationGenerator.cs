@@ -346,41 +346,51 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
     private static IEnumerable<string> GetReferencedRegistrarCalls(Compilation compilation)
     {
-        var attributeType = compilation.GetTypeByMetadataName(typeof(FarsightRegistrarAttribute<>).FullName!);
-        if(attributeType is null)
-        {
-            return [];
-        }
-
         var registrarTypes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach(var assemblySymbol in compilation.SourceModule.ReferencedAssemblySymbols)
         {
             foreach(var attribute in assemblySymbol.GetAttributes())
             {
-                if(attribute.AttributeClass is not INamedTypeSymbol attributeClass
-                   || !SymbolEqualityComparer.Default.Equals(attributeClass.ConstructedFrom, attributeType))
+                if(attribute.AttributeClass is not INamedTypeSymbol attributeClass)
                 {
                     continue;
                 }
 
-                if(attributeClass.TypeArguments.Length != 1)
+                string? attributeNamespace = attributeClass.ContainingNamespace?.ToDisplayString();
+                if(attributeNamespace != typeof(FarsightRegistrarAttribute<>).Namespace)
                 {
                     continue;
                 }
 
-                if(attributeClass.TypeArguments[0] is not INamedTypeSymbol registrarType)
+                if(TryGetRegistrarTypeFromAttribute(attributeClass, out var registrarType))
                 {
-                    continue;
+                    registrarTypes.Add(registrarType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                 }
-
-                registrarTypes.Add(registrarType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             }
         }
 
         return registrarTypes
             .OrderBy(typeName => typeName, StringComparer.Ordinal)
             .Select(typeName => $"{typeName}.Register();");
+    }
+
+    private static bool TryGetRegistrarTypeFromAttribute(INamedTypeSymbol attributeClass, out INamedTypeSymbol registrarType)
+    {
+        registrarType = null!;
+
+        if(attributeClass.ConstructedFrom.MetadataName != "FarsightRegistrarAttribute`1")
+        {
+            return false;
+        }
+
+        if(attributeClass.TypeArguments.Length == 1 && attributeClass.TypeArguments[0] is INamedTypeSymbol genericRegistrarType)
+        {
+            registrarType = genericRegistrarType;
+            return true;
+        }
+
+        return false;
     }
 
     private static void GeneratePaddingConstructor(SingletonModel singleton, SourceProductionContext context)
