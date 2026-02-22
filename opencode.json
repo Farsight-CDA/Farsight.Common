@@ -1,0 +1,25 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {
+        "read": {
+            "*": "allow",
+            "*.env": "deny",
+            "*.env.*": "deny",
+            "*.env.example": "allow",
+            "appsettings.json": "deny",
+            "appsettings.*.json": "deny",
+            "**/appsettings.json": "deny",
+            "**/appsettings.*.json": "deny",
+            "/home/vscode/.nuget/packages/**/*": "allow",
+            "/tmp/**/*": "allow"
+        },
+        "edit": {
+            "*": "allow",
+            "appsettings.json": "deny",
+            "appsettings.*.json": "deny",
+            "**/appsettings.json": "deny",
+            "**/appsettings.*.json": "deny",
+            "/tmp/**/*": "allow"
+        }
+    }
+}
