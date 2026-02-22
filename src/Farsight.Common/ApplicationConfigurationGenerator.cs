@@ -295,7 +295,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 [assembly: global::Farsight.Common.FarsightRegistrarAttribute<global::Farsight.Common.Generated.FarsightRegistrar>]
 
                 namespace Farsight.Common.Generated;
-                public static class FarsightRegistrar
+                public sealed class FarsightRegistrar
                 {
                     private static int _isRegistered;
 
