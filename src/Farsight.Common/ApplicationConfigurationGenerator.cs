@@ -287,15 +287,16 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         bool hasLocalRegistrations = registrationCalls.Length > 0;
         if(hasLocalRegistrations)
         {
+            string localRegistrarTypeName = BuildRegistrarTypeName(compilation);
             string registrarSource = $$"""
                 using Microsoft.Extensions.DependencyInjection;
                 using Microsoft.Extensions.Hosting;
                 using Microsoft.Extensions.Configuration;
 
-                [assembly: global::Farsight.Common.FarsightRegistrarAttribute<global::Farsight.Common.Generated.FarsightRegistrar>]
+                [assembly: global::Farsight.Common.FarsightRegistrarAttribute<global::Farsight.Common.Generated.{{localRegistrarTypeName}}>]
 
                 namespace Farsight.Common.Generated;
-                public sealed class FarsightRegistrar
+                public sealed class {{localRegistrarTypeName}}
                 {
                     private static int _isRegistered;
 
@@ -317,7 +318,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         var registrarCalls = new List<string>();
         if(hasLocalRegistrations)
         {
-            registrarCalls.Add("global::Farsight.Common.Generated.FarsightRegistrar.Register();");
+            registrarCalls.Add($"global::Farsight.Common.Generated.{BuildRegistrarTypeName(compilation)}.Register();");
         }
 
         registrarCalls.AddRange(GetReferencedRegistrarCalls(compilation));
@@ -481,5 +482,18 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         return serviceTypeBuilder.ToImmutable();
+    }
+
+    private static string BuildRegistrarTypeName(Compilation compilation)
+    {
+        string assemblyName = compilation.AssemblyName ?? "UnknownAssembly";
+        var typeNameBuilder = new StringBuilder("FarsightRegistrar_");
+
+        foreach(char character in assemblyName)
+        {
+            typeNameBuilder.Append(Char.IsLetterOrDigit(character) || character == '_' ? character : '_');
+        }
+
+        return typeNameBuilder.ToString();
     }
 }
