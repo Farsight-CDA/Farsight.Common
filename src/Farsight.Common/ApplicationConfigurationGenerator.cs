@@ -252,7 +252,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                     .Bind({{configSection}})
                     .ValidateDataAnnotations();
                 builder.Services.AddSingleton<{{classOption.FullName}}>(
-                    provider => provider.GetService<Microsoft.Extensions.Options.IOptions<{{classOption.FullName}}>>().Value);
+                    provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::Microsoft.Extensions.Options.IOptions<{{classOption.FullName}}>>(provider).Value);
                 """
             );
 
@@ -330,7 +330,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             {
                 serviceRegistrations.AppendLine(
                     $"""
-                    builder.Services.AddSingleton<Singleton, {serviceName}>(provider => provider.GetService<{serviceName}>());
+                    builder.Services.AddSingleton<Singleton, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
                     """);
             }
 
@@ -339,7 +339,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 string serviceTypeName = serviceType.ToDisplayString();
                 serviceRegistrations.AppendLine(
                     $"""
-                    builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => provider.GetService<{serviceName}>());
+                    builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
                     """);
             }
 
@@ -376,6 +376,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         {
             string localRegistrarTypeName = BuildRegistrarTypeName(compilation);
             string registrarSource = $$"""
+                #nullable enable
+
                 using Microsoft.Extensions.DependencyInjection;
                 using Microsoft.Extensions.Hosting;
                 using Microsoft.Extensions.Configuration;
@@ -417,6 +419,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         string bootstrapSource = $$"""
+            #nullable enable
+
             using System.Runtime.CompilerServices;
 
             namespace Farsight.Common.Generated;
@@ -502,6 +506,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         string source = $$"""
+            #nullable enable
+
             namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
             {
                 sealed partial class {{singleton.TypeSymbol.Name}}
