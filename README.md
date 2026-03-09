@@ -114,6 +114,34 @@ When discovered by the generator:
 - `ValidateDataAnnotations()` is enabled.
 - A singleton for the concrete options object is registered so it can be injected directly.
 
+You can also attach a FluentValidation validator without registering the validator in DI:
+
+```csharp
+using Farsight.Common;
+using FluentValidation;
+
+[ConfigOption<MyFeatureOptionsValidator>(SectionName = "MyFeature")]
+public sealed class MyFeatureOptions
+{
+    public string Endpoint { get; set; } = string.Empty;
+}
+
+public sealed class MyFeatureOptionsValidator : AbstractValidator<MyFeatureOptions>
+{
+    public MyFeatureOptionsValidator()
+    {
+        RuleFor(x => x.Endpoint).NotEmpty();
+    }
+}
+```
+
+When the generic form is used:
+
+- `ValidateDataAnnotations()` still runs.
+- The generated options validation step creates `new TValidator()` on demand.
+- The FluentValidation validator itself is not registered in DI.
+- `TValidator` is constrained to `FluentValidation.IValidator` and `new()`.
+
 ## Generator Rules
 
 - `FC001`: classes inheriting `Singleton` or `FarsightStartup` must be `partial`.

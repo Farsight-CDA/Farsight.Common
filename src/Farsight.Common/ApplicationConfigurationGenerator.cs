@@ -43,7 +43,14 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             static (spc, source) => Execute(source.Left, source.Right.Left, source.Right.Right, spc));
     }
 
-    internal record struct ConfigOptionModel(string FullName, string? SectionName);
+    internal record struct ConfigOptionModel(
+        string FullName,
+        string? SectionName,
+        string? ValidatorFullName,
+        string? ValidatorHelperTypeName,
+        ImmutableArray<Diagnostic> Diagnostics
+    );
+
     private static ConfigOptionModel? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
     {
         var classDeclarationSyntax = (ClassDeclarationSyntax) context.Node;
@@ -54,7 +61,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         var attributeData = symbol
             .GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == typeof(ConfigOptionAttribute).FullName);
+            .FirstOrDefault(a => TryGetConfigOptionAttribute(a, out _));
 
         if(attributeData is null)
         {
@@ -68,7 +75,26 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             sectionName = s;
         }
 
-        return new ConfigOptionModel(symbol.ToDisplayString(), sectionName);
+        var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
+        string? validatorFullName = null;
+        string? validatorHelperTypeName = null;
+
+        if(TryGetConfigOptionAttribute(attributeData, out var validatorType))
+        {
+            if(validatorType is not null)
+            {
+                validatorFullName = validatorType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                validatorHelperTypeName = BuildConfigOptionValidatorTypeName(symbol);
+
+            }
+        }
+
+        return new ConfigOptionModel(
+            symbol.ToDisplayString(),
+            sectionName,
+            validatorFullName,
+            validatorHelperTypeName,
+            diagnostics.ToImmutable());
     }
 
     internal record struct InjectedFieldModel(string TypeFullName, string Name);
@@ -201,10 +227,21 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     private static void Execute(Compilation compilation, ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
     {
         var optionRegistrations = new StringBuilder();
+        var optionValidatorTypes = new StringBuilder();
         var serviceRegistrations = new StringBuilder();
 
-        foreach(var classOption in configOptions.Distinct())
+        foreach(var classOption in GetUniqueConfigOptions(configOptions))
         {
+            foreach(var diagnostic in classOption.Diagnostics)
+            {
+                context.ReportDiagnostic(diagnostic);
+            }
+
+            if(classOption.Diagnostics.Length > 0)
+            {
+                continue;
+            }
+
             string configSection = String.IsNullOrWhiteSpace(classOption.SectionName)
                 ? "builder.Configuration"
                 : $"""builder.Configuration.GetSection("{classOption.SectionName}")""";
@@ -218,6 +255,56 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                     provider => provider.GetService<Microsoft.Extensions.Options.IOptions<{{classOption.FullName}}>>().Value);
                 """
             );
+
+            if(classOption is { ValidatorFullName: not null, ValidatorHelperTypeName: not null })
+            {
+                optionRegistrations.AppendLine(
+                    $$"""
+                    builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<{{classOption.FullName}}>, Farsight.Common.Generated.{{classOption.ValidatorHelperTypeName}}>();
+                    """
+                );
+
+                optionValidatorTypes.AppendLine(
+                    $$"""
+                    internal sealed class {{classOption.ValidatorHelperTypeName}} : global::Microsoft.Extensions.Options.IValidateOptions<{{classOption.FullName}}>
+                    {
+                        public global::Microsoft.Extensions.Options.ValidateOptionsResult Validate(string? name, {{classOption.FullName}} options)
+                        {
+                            _ = name;
+
+                            if(options is null)
+                            {
+                                return global::Microsoft.Extensions.Options.ValidateOptionsResult.Skip;
+                            }
+
+                            var validationResult = new {{classOption.ValidatorFullName}}().Validate(options);
+                            if(validationResult.IsValid)
+                            {
+                                return global::Microsoft.Extensions.Options.ValidateOptionsResult.Success;
+                            }
+
+                            var failures = new global::System.Collections.Generic.List<string>();
+                            foreach(var failure in validationResult.Errors)
+                            {
+                                if(failure is null)
+                                {
+                                    continue;
+                                }
+
+                                failures.Add(
+                                    global::System.String.IsNullOrWhiteSpace(failure.PropertyName)
+                                        ? failure.ErrorMessage
+                                        : $"{failure.PropertyName}: {failure.ErrorMessage}");
+                            }
+
+                            return failures.Count == 0
+                                ? global::Microsoft.Extensions.Options.ValidateOptionsResult.Fail("FluentValidation reported a validation failure without any error details.")
+                                : global::Microsoft.Extensions.Options.ValidateOptionsResult.Fail(failures);
+                        }
+                    }
+                    """
+                );
+            }
         }
 
         foreach(var singleton in GetUniqueSingletons(singletons))
@@ -310,6 +397,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 {{CodeUtils.Indent(registrationCalls.ToString(), 8)}}
                     }
                 }
+                {{(optionValidatorTypes.Length > 0 ? "\n" + optionValidatorTypes.ToString() : String.Empty)}}
                 """;
 
             context.AddSource("FarsightCommonRegistrar.g.cs", SourceText.From(registrarSource, Encoding.UTF8));
@@ -337,7 +425,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 [ModuleInitializer]
                 internal static void Initialize()
                 {
-            {{CodeUtils.Indent(string.Join("\n", registrarCalls), 8)}}
+            {{CodeUtils.Indent(String.Join("\n", registrarCalls), 8)}}
                 }
             }
             """;
@@ -454,6 +542,27 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         return uniqueSingletons.Values;
     }
 
+    private static IEnumerable<ConfigOptionModel> GetUniqueConfigOptions(ImmutableArray<ConfigOptionModel> configOptions)
+    {
+        var uniqueConfigOptions = new Dictionary<string, ConfigOptionModel>(StringComparer.Ordinal);
+
+        foreach(var configOption in configOptions)
+        {
+            if(uniqueConfigOptions.TryGetValue(configOption.FullName, out var existing))
+            {
+                uniqueConfigOptions[configOption.FullName] = existing with
+                {
+                    Diagnostics = existing.Diagnostics.Concat(configOption.Diagnostics).ToImmutableArray()
+                };
+                continue;
+            }
+
+            uniqueConfigOptions[configOption.FullName] = configOption;
+        }
+
+        return uniqueConfigOptions.Values;
+    }
+
     private static string BuildSingletonHintName(INamedTypeSymbol typeSymbol)
     {
         string typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -466,6 +575,49 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         hintNameBuilder.Append(".g.cs");
         return hintNameBuilder.ToString();
+    }
+
+    private static string BuildConfigOptionValidatorTypeName(INamedTypeSymbol typeSymbol)
+    {
+        string typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var typeNameBuilder = new StringBuilder("FarsightConfigValidator_");
+
+        foreach(char character in typeName)
+        {
+            typeNameBuilder.Append(Char.IsLetterOrDigit(character) || character == '_' ? character : '_');
+        }
+
+        return typeNameBuilder.ToString();
+    }
+
+    private static bool TryGetConfigOptionAttribute(AttributeData attributeData, out INamedTypeSymbol? validatorType)
+    {
+        validatorType = null;
+
+        if(attributeData.AttributeClass is not INamedTypeSymbol attributeClass)
+        {
+            return false;
+        }
+
+        if(attributeClass.Name != nameof(ConfigOptionAttribute)
+           || attributeClass.ContainingNamespace.ToDisplayString() != typeof(ConfigOptionAttribute).Namespace)
+        {
+            return false;
+        }
+
+        if(attributeClass.Arity == 0)
+        {
+            return true;
+        }
+
+        if(attributeClass is { Arity: 1, TypeArguments.Length: 1 }
+           && attributeClass.TypeArguments[0] is INamedTypeSymbol namedValidatorType)
+        {
+            validatorType = namedValidatorType;
+            return true;
+        }
+
+        return false;
     }
 
     private static ImmutableArray<ITypeSymbol> DistinctServiceTypes(IEnumerable<ITypeSymbol> serviceTypes)
