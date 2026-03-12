@@ -21,12 +21,12 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Farsight.Common.SharedTypes\Farsight.Common.SharedTypes.csproj" PrivateAssets="all" />
 
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.3" GeneratePathProperty="true" />
-		<PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.3" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.4" GeneratePathProperty="true" />
+		<PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.4" />
 		
-		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
-		<PackageReference Include="Polyfill" Version="9.8.1" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all" />
+		<PackageReference Include="Polyfill" Version="9.18.0" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>
