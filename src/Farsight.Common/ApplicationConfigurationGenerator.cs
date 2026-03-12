@@ -1,5 +1,4 @@
 using Farsight.Common.Diagnostics;
-using Farsight.Common.Startup;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -69,7 +68,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         string? sectionName = null;
-        var sectionNameArg = attributeData.NamedArguments.FirstOrDefault(kvp => kvp.Key == nameof(ConfigOptionAttribute.SectionName));
+        var sectionNameArg = attributeData.NamedArguments.FirstOrDefault(kvp => kvp.Key == SharedTypes.SectionNameProperty);
         if(sectionNameArg.Value.Value is string s)
         {
             sectionName = s;
@@ -119,13 +118,12 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         while(baseType is not null)
         {
-            string baseTypeString = baseType.ToDisplayString();
-            if(baseTypeString == typeof(Singleton).FullName)
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.Singleton))
             {
                 isSingleton = true;
                 break;
             }
-            if(baseTypeString == typeof(FarsightStartup).FullName)
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.FarsightStartup))
             {
                 isStartup = true;
                 break;
@@ -156,7 +154,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         foreach(var member in symbol.GetMembers().OfType<IFieldSymbol>())
         {
             var injectAttr = member.GetAttributes()
-                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == typeof(InjectAttribute).FullName);
+                .FirstOrDefault(a => SharedTypes.HasMetadataName(a.AttributeClass, SharedTypes.InjectAttribute));
 
             if(injectAttr is not null)
             {
@@ -177,8 +175,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         foreach(var attributeData in symbol.GetAttributes())
         {
-            if(attributeData.AttributeClass is not INamedTypeSymbol { Name: nameof(ServiceTypeAttribute<object>), Arity: 1 } attributeClass
-               || attributeClass.ContainingNamespace.ToDisplayString() != typeof(ServiceTypeAttribute<>).Namespace)
+            if(attributeData.AttributeClass is not INamedTypeSymbol attributeClass
+               || !SharedTypes.HasMetadataName(attributeClass, SharedTypes.ServiceTypeAttribute))
             {
                 continue;
             }
@@ -351,7 +349,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         {
             registrationCalls.AppendLine(
                 $$"""
-                {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.RegisterOptions)}}(builder =>
+                global::Farsight.Common.FarsightCommonRegistry.RegisterOptions(builder =>
                 {
                 {{CodeUtils.Indent(optionRegistrations.ToString(), 16)}}
                 });
@@ -363,7 +361,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         {
             registrationCalls.AppendLine(
                 $$"""
-                {{nameof(FarsightCommonRegistry)}}.{{nameof(FarsightCommonRegistry.RegisterServices)}}(builder =>
+                global::Farsight.Common.FarsightCommonRegistry.RegisterServices(builder =>
                 {
                 {{CodeUtils.Indent(serviceRegistrations.ToString(), 16)}}
                 });
@@ -450,8 +448,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                string? attributeNamespace = attributeClass.ContainingNamespace?.ToDisplayString();
-                if(attributeNamespace != typeof(FarsightRegistrarAttribute<>).Namespace)
+                if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FarsightRegistrarAttribute))
                 {
                     continue;
                 }
@@ -472,7 +469,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     {
         registrarType = null!;
 
-        if(attributeClass.ConstructedFrom.MetadataName != "FarsightRegistrarAttribute`1")
+        if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FarsightRegistrarAttribute))
         {
             return false;
         }
@@ -505,20 +502,38 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             assignments.AppendLine($"this.{field.Name} = {field.Name.TrimStart('_')};");
         }
 
-        string source = $$"""
-            #nullable enable
+        string source;
+        if(singleton.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
+        {
+            source = $$"""
+                #nullable enable
 
-            namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
-            {
                 sealed partial class {{singleton.TypeSymbol.Name}}
                 {
                     public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
                     {
-            {{CodeUtils.Indent(assignments.ToString(), 12)}}
+                {{CodeUtils.Indent(assignments.ToString(), 8)}}
                     }
                 }
-            }
-            """;
+                """;
+        }
+        else
+        {
+            source = $$"""
+                #nullable enable
+
+                namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
+                {
+                    sealed partial class {{singleton.TypeSymbol.Name}}
+                    {
+                        public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
+                        {
+                {{CodeUtils.Indent(assignments.ToString(), 12)}}
+                        }
+                    }
+                }
+                """;
+        }
 
         string hintName = BuildSingletonHintName(singleton.TypeSymbol);
         context.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
@@ -605,8 +620,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             return false;
         }
 
-        if(attributeClass.Name != nameof(ConfigOptionAttribute)
-           || attributeClass.ContainingNamespace.ToDisplayString() != typeof(ConfigOptionAttribute).Namespace)
+        if(!SharedTypes.HasMetadataName(attributeClass, SharedTypes.ConfigOptionAttribute)
+           && !SharedTypes.HasMetadataName(attributeClass, SharedTypes.GenericConfigOptionAttribute))
         {
             return false;
         }

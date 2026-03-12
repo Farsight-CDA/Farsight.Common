@@ -1,4 +1,4 @@
-﻿namespace Farsight.Common;
+namespace Farsight.Common;
 
 /// <summary>
 /// Represents an exception that is thrown in code paths that are supposed to be unreachable.

@@ -1,42 +1,39 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>true</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
 		<RootNamespace>Farsight.Common</RootNamespace>
-		<IsRoslynComponent>true</IsRoslynComponent>
-		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 
 		<PackageId>Farsight.Common</PackageId>
 		<Title>Farsight.Common</Title>
 		<Authors>Playwo</Authors>
-		<Description>A library including a source generator with common utilities used by Farsight.</Description>
+		<Description>A library including common utilities and a source generator used by Farsight.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Version>0.9.4-beta</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Farsight.Common.SharedTypes\Farsight.Common.SharedTypes.csproj" PrivateAssets="all" />
+		<ProjectReference Include="..\Farsight.Common.Generator\Farsight.Common.Generator.csproj" PrivateAssets="all" ReferenceOutputAssembly="false" />
 
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.4" GeneratePathProperty="true" />
+		<PackageReference Include="FluentValidation" Version="12.1.1" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.4" />
 		<PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.4" />
-		
-		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all" />
-		<PackageReference Include="Polyfill" Version="9.18.0" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.dll" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
-		<None Include="$(OutputPath)\Farsight.Common.SharedTypes.xml" Pack="true" PackagePath="lib\netstandard2.0" Visible="true" />
-		<None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="true" />
+		<Compile Remove="ApplicationConfigurationGenerator.cs" />
+		<Compile Remove="CodeUtils.cs" />
+		<Compile Remove="Diagnostics\**\*.cs" />
+	</ItemGroup>
 
-		<None Include="$(PkgMicrosoft_Extensions_Hosting_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Hosting.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="true" />
+		<None Include="..\Farsight.Common.Generator\bin\$(Configuration)\netstandard2.0\Farsight.Common.Generator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 	</ItemGroup>
 
 </Project>

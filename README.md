@@ -1,6 +1,6 @@
 # Farsight.Common
 
-`Farsight.Common` is a `netstandard2.0` library that combines:
+`Farsight.Common` is a `.NET 10` library that combines:
 
 - Shared runtime types for Farsight-style hosted applications.
 - A Roslyn incremental source generator that auto-registers services and configuration.
@@ -17,6 +17,8 @@
 ```bash
 dotnet add package Farsight.Common
 ```
+
+The package targets `net10.0` and includes its source generator automatically.
 
 ## 1) Register It On Your App Builder
 
