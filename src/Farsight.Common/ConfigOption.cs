@@ -10,6 +10,17 @@ public class ConfigOptionAttribute : Attribute
     /// Gets or sets an optional configuration section name to bind from.
     /// </summary>
     public string? SectionName { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether binding should fail when configuration contains keys that do not map to the target schema.
+    /// When omitted, generated registrations enable this automatically for section-bound options and leave root-bound options lenient.
+    /// </summary>
+    public bool ErrorOnUnknownConfiguration { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether non-public properties should participate in configuration binding.
+    /// </summary>
+    public bool BindNonPublicProperties { get; set; }
 }
 
 /// <summary>

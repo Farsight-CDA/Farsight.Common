@@ -16,6 +16,8 @@ internal static class SharedTypes
     public const string FarsightStartup = StartupNamespace + ".FarsightStartup";
 
     public const string SectionNameProperty = "SectionName";
+    public const string ErrorOnUnknownConfigurationProperty = "ErrorOnUnknownConfiguration";
+    public const string BindNonPublicPropertiesProperty = "BindNonPublicProperties";
 
     public static bool HasMetadataName(INamedTypeSymbol? symbol, string metadataName)
     {

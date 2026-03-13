@@ -113,8 +113,29 @@ When discovered by the generator:
 
 - `AddOptionsWithValidateOnStart<T>()` is registered.
 - The type is bound from configuration root or `SectionName`.
+- Section-bound options use strict binding by default, so unknown or misspelled keys fail startup instead of being ignored.
 - `ValidateDataAnnotations()` is enabled.
 - A singleton for the concrete options object is registered so it can be injected directly.
+
+If you bind from the configuration root and still want strict binding, opt in explicitly:
+
+```csharp
+[ConfigOption(ErrorOnUnknownConfiguration = true)]
+public sealed class RootOptions
+{
+    public string Endpoint { get; set; } = string.Empty;
+}
+```
+
+You can also forward selected `BinderOptions` flags from the attribute:
+
+```csharp
+[ConfigOption(SectionName = "MyFeature", BindNonPublicProperties = true)]
+public sealed class MyFeatureOptions
+{
+    internal string Endpoint { get; set; } = string.Empty;
+}
+```
 
 You can also attach a FluentValidation validator without registering the validator in DI:
 

@@ -45,6 +45,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     internal record struct ConfigOptionModel(
         string FullName,
         string? SectionName,
+        bool ErrorOnUnknownConfiguration,
+        bool BindNonPublicProperties,
         string? ValidatorFullName,
         string? ValidatorHelperTypeName,
         ImmutableArray<Diagnostic> Diagnostics
@@ -74,6 +76,22 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             sectionName = s;
         }
 
+        bool errorOnUnknownConfiguration = !String.IsNullOrWhiteSpace(sectionName);
+        var errorOnUnknownConfigurationArg = attributeData.NamedArguments
+            .FirstOrDefault(kvp => kvp.Key == SharedTypes.ErrorOnUnknownConfigurationProperty);
+        if(errorOnUnknownConfigurationArg.Key is not null && errorOnUnknownConfigurationArg.Value.Value is bool value)
+        {
+            errorOnUnknownConfiguration = value;
+        }
+
+        bool bindNonPublicProperties = false;
+        var bindNonPublicPropertiesArg = attributeData.NamedArguments
+            .FirstOrDefault(kvp => kvp.Key == SharedTypes.BindNonPublicPropertiesProperty);
+        if(bindNonPublicPropertiesArg.Key is not null && bindNonPublicPropertiesArg.Value.Value is bool bindNonPublicValue)
+        {
+            bindNonPublicProperties = bindNonPublicValue;
+        }
+
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
         string? validatorFullName = null;
         string? validatorHelperTypeName = null;
@@ -91,6 +109,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         return new ConfigOptionModel(
             symbol.ToDisplayString(),
             sectionName,
+            errorOnUnknownConfiguration,
+            bindNonPublicProperties,
             validatorFullName,
             validatorHelperTypeName,
             diagnostics.ToImmutable());
@@ -244,10 +264,25 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 ? "builder.Configuration"
                 : $"""builder.Configuration.GetSection("{classOption.SectionName}")""";
 
+            var binderOptionAssignments = new List<string>();
+            if(classOption.ErrorOnUnknownConfiguration)
+            {
+                binderOptionAssignments.Add("binderOptions.ErrorOnUnknownConfiguration = true");
+            }
+
+            if(classOption.BindNonPublicProperties)
+            {
+                binderOptionAssignments.Add("binderOptions.BindNonPublicProperties = true");
+            }
+
+            string bindCall = binderOptionAssignments.Count > 0
+                ? $".Bind({configSection}, binderOptions => {{ {String.Join("; ", binderOptionAssignments)}; }})"
+                : $".Bind({configSection})";
+
             optionRegistrations.AppendLine(
                 $$"""
                 builder.Services.AddOptionsWithValidateOnStart<{{classOption.FullName}}>()
-                    .Bind({{configSection}})
+                    {{bindCall}}
                     .ValidateDataAnnotations();
                 builder.Services.AddSingleton<{{classOption.FullName}}>(
                     provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<global::Microsoft.Extensions.Options.IOptions<{{classOption.FullName}}>>(provider).Value);
