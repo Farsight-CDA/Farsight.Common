@@ -1,4 +1,4 @@
-﻿namespace Farsight.Common.Diagnostics;
+namespace Farsight.Common.Diagnostics;
 
 internal static class RuleCategories
 {

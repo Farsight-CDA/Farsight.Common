@@ -1,7 +1,7 @@
-using System.Diagnostics.CodeAnalysis;
 using Farsight.Common.Startup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Farsight.Common;
 

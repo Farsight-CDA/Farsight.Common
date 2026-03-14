@@ -70,7 +70,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
 
         string? sectionName = null;
-        var sectionNameArg = attributeData.NamedArguments.FirstOrDefault(kvp => kvp.Key == SharedTypes.SectionNameProperty);
+        var sectionNameArg = attributeData.NamedArguments.FirstOrDefault(kvp => kvp.Key == SharedTypes.SECTION_NAME_PROPERTY);
         if(sectionNameArg.Value.Value is string s)
         {
             sectionName = s;
@@ -78,7 +78,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         bool errorOnUnknownConfiguration = !String.IsNullOrWhiteSpace(sectionName);
         var errorOnUnknownConfigurationArg = attributeData.NamedArguments
-            .FirstOrDefault(kvp => kvp.Key == SharedTypes.ErrorOnUnknownConfigurationProperty);
+            .FirstOrDefault(kvp => kvp.Key == SharedTypes.ERROR_ON_UNKNOWN_CONFIGURATION_PROPERTY);
         if(errorOnUnknownConfigurationArg.Key is not null && errorOnUnknownConfigurationArg.Value.Value is bool value)
         {
             errorOnUnknownConfiguration = value;
@@ -86,7 +86,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         bool bindNonPublicProperties = false;
         var bindNonPublicPropertiesArg = attributeData.NamedArguments
-            .FirstOrDefault(kvp => kvp.Key == SharedTypes.BindNonPublicPropertiesProperty);
+            .FirstOrDefault(kvp => kvp.Key == SharedTypes.BIND_NON_PUBLIC_PROPERTIES_PROPERTY);
         if(bindNonPublicPropertiesArg.Key is not null && bindNonPublicPropertiesArg.Value.Value is bool bindNonPublicValue)
         {
             bindNonPublicProperties = bindNonPublicValue;
@@ -138,12 +138,12 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         while(baseType is not null)
         {
-            if(SharedTypes.HasMetadataName(baseType, SharedTypes.Singleton))
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.SINGLETON))
             {
                 isSingleton = true;
                 break;
             }
-            if(SharedTypes.HasMetadataName(baseType, SharedTypes.FarsightStartup))
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.FARSIGHT_STARTUP))
             {
                 isStartup = true;
                 break;
@@ -174,7 +174,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         foreach(var member in symbol.GetMembers().OfType<IFieldSymbol>())
         {
             var injectAttr = member.GetAttributes()
-                .FirstOrDefault(a => SharedTypes.HasMetadataName(a.AttributeClass, SharedTypes.InjectAttribute));
+                .FirstOrDefault(a => SharedTypes.HasMetadataName(a.AttributeClass, SharedTypes.INJECT_ATTRIBUTE));
 
             if(injectAttr is not null)
             {
@@ -196,7 +196,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         foreach(var attributeData in symbol.GetAttributes())
         {
             if(attributeData.AttributeClass is not INamedTypeSymbol attributeClass
-               || !SharedTypes.HasMetadataName(attributeClass, SharedTypes.ServiceTypeAttribute))
+               || !SharedTypes.HasMetadataName(attributeClass, SharedTypes.SERVICE_TYPE_ATTRIBUTE))
             {
                 continue;
             }
@@ -483,7 +483,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FarsightRegistrarAttribute))
+                if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FARSIGHT_REGISTRAR_ATTRIBUTE))
                 {
                     continue;
                 }
@@ -504,7 +504,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     {
         registrarType = null!;
 
-        if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FarsightRegistrarAttribute))
+        if(!SharedTypes.HasMetadataName(attributeClass.ConstructedFrom, SharedTypes.FARSIGHT_REGISTRAR_ATTRIBUTE))
         {
             return false;
         }
@@ -537,10 +537,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             assignments.AppendLine($"this.{field.Name} = {field.Name.TrimStart('_')};");
         }
 
-        string source;
-        if(singleton.TypeSymbol.ContainingNamespace.IsGlobalNamespace)
-        {
-            source = $$"""
+        string source = singleton.TypeSymbol.ContainingNamespace.IsGlobalNamespace
+            ? $$"""
                 #nullable enable
 
                 sealed partial class {{singleton.TypeSymbol.Name}}
@@ -550,11 +548,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 {{CodeUtils.Indent(assignments.ToString(), 8)}}
                     }
                 }
-                """;
-        }
-        else
-        {
-            source = $$"""
+                """
+            : $$"""
                 #nullable enable
 
                 namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
@@ -568,7 +563,6 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                     }
                 }
                 """;
-        }
 
         string hintName = BuildSingletonHintName(singleton.TypeSymbol);
         context.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
@@ -584,9 +578,9 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             {
                 var merged = existing with
                 {
-                    InjectedFields = existing.InjectedFields.Concat(singleton.InjectedFields).Distinct().ToImmutableArray(),
+                    InjectedFields = [.. existing.InjectedFields.Concat(singleton.InjectedFields).Distinct()],
                     ServiceTypes = DistinctServiceTypes(existing.ServiceTypes.Concat(singleton.ServiceTypes)),
-                    Diagnostics = existing.Diagnostics.Concat(singleton.Diagnostics).ToImmutableArray()
+                    Diagnostics = [.. existing.Diagnostics, .. singleton.Diagnostics]
                 };
                 uniqueSingletons[singleton.TypeSymbol] = merged;
                 continue;
@@ -608,7 +602,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             {
                 uniqueConfigOptions[configOption.FullName] = existing with
                 {
-                    Diagnostics = existing.Diagnostics.Concat(configOption.Diagnostics).ToImmutableArray()
+                    Diagnostics = [.. existing.Diagnostics, .. configOption.Diagnostics]
                 };
                 continue;
             }
@@ -655,8 +649,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             return false;
         }
 
-        if(!SharedTypes.HasMetadataName(attributeClass, SharedTypes.ConfigOptionAttribute)
-           && !SharedTypes.HasMetadataName(attributeClass, SharedTypes.GenericConfigOptionAttribute))
+        if(!SharedTypes.HasMetadataName(attributeClass, SharedTypes.CONFIG_OPTION_ATTRIBUTE)
+           && !SharedTypes.HasMetadataName(attributeClass, SharedTypes.GENERIC_CONFIG_OPTION_ATTRIBUTE))
         {
             return false;
         }
