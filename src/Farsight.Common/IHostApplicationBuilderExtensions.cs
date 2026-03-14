@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Farsight.Common.Startup;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,7 +16,8 @@ public static class IHostApplicationBuilderExtensions
     /// <typeparam name="TStartup">The startup lifecycle service type.</typeparam>
     /// <param name="builder">The host builder to configure.</param>
     /// <returns>The same host builder for chaining.</returns>
-    public static IHostApplicationBuilder AddApplication<TStartup>(this IHostApplicationBuilder builder)
+    public static IHostApplicationBuilder AddApplication<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TStartup>(this IHostApplicationBuilder builder)
         where TStartup : FarsightStartup
     {
         builder.Services.AddHostedService<TStartup>();
