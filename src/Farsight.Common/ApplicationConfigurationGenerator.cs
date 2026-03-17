@@ -21,7 +21,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     {
         var configOptions = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (s, _) => s is ClassDeclarationSyntax { AttributeLists.Count: > 0 },
+                predicate: static (s, _) => s is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
                 transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!.Value)
@@ -54,8 +54,8 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
     private static ConfigOptionModel? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
     {
-        var classDeclarationSyntax = (ClassDeclarationSyntax) context.Node;
-        if(context.SemanticModel.GetDeclaredSymbol(classDeclarationSyntax) is not INamedTypeSymbol symbol)
+        var typeDeclarationSyntax = (TypeDeclarationSyntax) context.Node;
+        if(context.SemanticModel.GetDeclaredSymbol(typeDeclarationSyntax) is not INamedTypeSymbol symbol)
         {
             return null;
         }

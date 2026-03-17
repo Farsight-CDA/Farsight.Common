@@ -1,7 +1,7 @@
 namespace Farsight.Common;
 
 /// <summary>
-/// Marks a class as a configuration option model to be bound by generated registrations.
+/// Marks a class or record class as a configuration option model to be bound by generated registrations.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public class ConfigOptionAttribute : Attribute
@@ -24,7 +24,7 @@ public class ConfigOptionAttribute : Attribute
 }
 
 /// <summary>
-/// Marks a class as a configuration option model and associates a FluentValidation validator with it.
+/// Marks a class or record class as a configuration option model and associates a FluentValidation validator with it.
 /// </summary>
 /// <typeparam name="TValidator">The validator type to instantiate during options validation.</typeparam>
 [AttributeUsage(AttributeTargets.Class)]
