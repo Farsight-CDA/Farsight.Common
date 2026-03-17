@@ -1,28 +1,64 @@
 # Farsight.Common
 
-`Farsight.Common` is a `.NET 10` library that combines:
+[![NuGet](https://img.shields.io/nuget/v/Farsight.Common.svg)](https://www.nuget.org/packages/Farsight.Common/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-blueviolet)](https://dotnet.microsoft.com/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-- Shared runtime types for Farsight-style hosted applications.
-- A Roslyn incremental source generator that auto-registers services and configuration.
+A .NET 10 library providing shared runtime types and a Roslyn incremental source generator for Farsight-style hosted applications. The generator discovers annotated types and auto-registers services and configuration bindings at compile time, eliminating runtime reflection and manual DI registration. Fully compatible with AOT compilation.
 
-## What It Does
+---
 
-- Discovers classes annotated with `[ConfigOption]` and registers them with options binding + validation.
-- Discovers classes inheriting `Singleton` (and `FarsightStartup`) and auto-registers them in DI.
-- Generates constructor injection for `[Inject]` private readonly fields in `Singleton`/`FarsightStartup` classes.
-- Applies generated registrations when `AddApplication<TStartup>()` or `AddApplicationOptions()` is called.
+## Features
 
-## Installation
+- **Compile-time service registration** — Annotated singletons and options are registered via source generation
+- **Zero runtime reflection** — All discovery happens at build time
+- **AOT compatible** — No reflection-based code paths; safe for native AOT publishing
+- **Strict configuration binding** — Unknown configuration keys fail at startup
+- **Validation support** — Data annotations and FluentValidation integration
+
+---
+
+## 🚀 Quick Start
+
+### 1. Install the Package
 
 ```bash
 dotnet add package Farsight.Common
 ```
 
-The package targets `net10.0` and includes its source generator automatically.
+### 2. Define Your Configuration
 
-## 1) Register It On Your App Builder
+```csharp
+using Farsight.Common;
+using System.ComponentModel.DataAnnotations;
 
-To activate generated registrations, call `AddApplication<TStartup>()` on your host builder:
+[ConfigOption(SectionName = "MyApp")]
+public class AppOptions
+{
+    [Required]
+    public string Endpoint { get; set; } = string.Empty;
+}
+```
+
+### 3. Create a Service
+
+```csharp
+using Farsight.Common;
+
+public sealed partial class Worker : Singleton
+{
+    [Inject]
+    private readonly AppOptions _options;
+
+    protected override Task RunAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Running on: {Endpoint}", _options.Endpoint);
+        return Task.CompletedTask;
+    }
+}
+```
+
+### 4. Wire Up Your Application
 
 ```csharp
 using Farsight.Common;
@@ -34,138 +70,78 @@ builder.AddApplication<BasicFarsightStartup>();
 await builder.Build().RunAsync();
 ```
 
-What this does:
+---
 
-- Adds your startup type (`TStartup`) as a hosted lifecycle service.
-- Applies all source-generated options and service registrations collected in `FarsightCommonRegistry`.
+## 📋 What Gets Generated
 
-If you need configuration binding during design-time only (for example EF tooling), use:
+| Attribute | What It Does |
+|-----------|-------------|
+| `[ConfigOption]` | Binds config section → options class with validation |
+| `[ConfigOption<TValidator>]` | Adds FluentValidation support |
+| `Singleton` (base class) | Registers as singleton + generates constructor injection |
+| `[Inject]` | Auto-wires dependencies into private fields |
 
-```csharp
-builder.AddApplicationOptions();
-```
+---
 
-This applies only `[ConfigOption]` registrations and skips singleton/service registrations.
+## 🏗️ Application Lifecycle
 
-Without this call, discovered `Singleton` and `[ConfigOption]` types will not be applied to DI/options.
+`BasicFarsightStartup` orchestrates your `Singleton` services through three phases:
 
-## 2) What Startup Is For
-
-`FarsightStartup` is the orchestrator for your application lifecycle. It coordinates discovered `Singleton` services in three phases:
-
-- `SetupAsync`: parallel setup work before normal startup.
-- `InitializeAsync`: ordered initialization work.
-- `RunAsync`: long-running execution work.
-
-`BasicFarsightStartup` is the default implementation that maps host lifecycle events to those phases:
-
-- `StartingAsync` -> `SetupServicesAsync`
-- `StartAsync` -> `InitializeServicesAsync`
-- `StartedAsync` -> `RunServicesAsync`
-
-If a singleton throws during `RunAsync` (except expected cancellation), startup logs a critical error and stops the host.
-
-## 3) Capabilities
-
-### Singleton Capabilities
-
-Create a service by inheriting `Singleton` and declaring the class as `partial`:
+1. **Setup** — Parallel preparation work
+2. **Initialize** — Ordered initialization
+3. **Run** — Long-running execution
 
 ```csharp
-using Farsight.Common;
-
-public sealed partial class Worker : Singleton
+public sealed partial class MyService : Singleton
 {
-    [Inject]
-    private readonly MyFeatureOptions _options;
-
-    protected override Task RunAsync(CancellationToken cancellationToken)
-    {
-        _logger.LogInformation("Endpoint: {Endpoint}", _options.Endpoint);
-        return Task.CompletedTask;
-    }
+    protected override Task SetupAsync(CancellationToken ct) 
+        => Task.CompletedTask;
+    
+    protected override Task InitializeAsync(CancellationToken ct) 
+        => Task.CompletedTask;
+    
+    protected override Task RunAsync(CancellationToken ct) 
+        => Task.CompletedTask;
 }
 ```
 
-When discovered by the generator:
+---
 
-- The class is registered as a singleton in DI.
-- It is also registered under the `Singleton` base type so startup can discover and run it.
-- A constructor is generated that provides framework dependencies (`IServiceProvider`, `ILogger<T>`, `IHostApplicationLifetime`) and assigns `[Inject]` fields.
+## 🔧 Advanced Configuration
 
-### Config Capabilities
-
-Define options by annotating a class with `[ConfigOption]`:
+### FluentValidation Support
 
 ```csharp
-using Farsight.Common;
-using System.ComponentModel.DataAnnotations;
+[ConfigOption<MyOptionsValidator>(SectionName = "Features")]
+public class MyOptions 
+{ 
+    public string Value { get; set; } = string.Empty;
+}
 
-[ConfigOption(SectionName = "MyFeature")]
-public sealed class MyFeatureOptions
+public class MyOptionsValidator : AbstractValidator<MyOptions>
 {
-    [Required]
-    public string Endpoint { get; set; } = string.Empty;
+    public MyOptionsValidator() => RuleFor(x => x.Value).NotEmpty();
 }
 ```
 
-When discovered by the generator:
 
-- `AddOptionsWithValidateOnStart<T>()` is registered.
-- The type is bound from configuration root or `SectionName`.
-- Section-bound options use strict binding by default, so unknown or misspelled keys fail startup instead of being ignored.
-- `ValidateDataAnnotations()` is enabled.
-- A singleton for the concrete options object is registered so it can be injected directly.
+### Design-Time Configuration
 
-If you bind from the configuration root and still want strict binding, opt in explicitly:
+For EF tooling or design-time scenarios:
 
 ```csharp
-[ConfigOption(ErrorOnUnknownConfiguration = true)]
-public sealed class RootOptions
-{
-    public string Endpoint { get; set; } = string.Empty;
-}
+builder.AddApplicationOptions(); // Only config, no services
 ```
 
-You can also forward selected `BinderOptions` flags from the attribute:
+---
 
-```csharp
-[ConfigOption(SectionName = "MyFeature", BindNonPublicProperties = true)]
-public sealed class MyFeatureOptions
-{
-    internal string Endpoint { get; set; } = string.Empty;
-}
-```
+## 📦 Requirements
 
-You can also attach a FluentValidation validator without registering the validator in DI:
+- .NET 10.0+
+- The source generator is included automatically
 
-```csharp
-using Farsight.Common;
-using FluentValidation;
+---
 
-[ConfigOption<MyFeatureOptionsValidator>(SectionName = "MyFeature")]
-public sealed class MyFeatureOptions
-{
-    public string Endpoint { get; set; } = string.Empty;
-}
+## 📝 License
 
-public sealed class MyFeatureOptionsValidator : AbstractValidator<MyFeatureOptions>
-{
-    public MyFeatureOptionsValidator()
-    {
-        RuleFor(x => x.Endpoint).NotEmpty();
-    }
-}
-```
-
-When the generic form is used:
-
-- `ValidateDataAnnotations()` still runs.
-- The generated options validation step creates `new TValidator()` on demand.
-- The FluentValidation validator itself is not registered in DI.
-- `TValidator` is constrained to `FluentValidation.IValidator` and `new()`.
-
-## Generator Rules
-
-- `FC001`: classes inheriting `Singleton` or `FarsightStartup` must be `partial`.
-- `FC002`: fields marked with `[Inject]` must be `private readonly`.
+MIT License — see [LICENSE](LICENSE) for details.
