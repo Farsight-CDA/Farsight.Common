@@ -14,6 +14,13 @@ public static class Extensions
         private IEnumerable<T> AsEnumerable() => MemoryMarshal.ToEnumerable(v);
 
         /// <summary>
+        /// Returns an enumerator for this <see cref="ReadOnlySpan{T}"/>.
+        /// </summary>
+        /// <returns></returns>
+        public ReadOnlySpan<T>.Enumerator GetEnumerator()
+            => v.Span.GetEnumerator();
+
+        /// <summary>
         /// Determines whether the memory contains any elements.
         /// </summary>
         /// <returns><see langword="true"/> if the memory contains at least one element; otherwise, <see langword="false"/>.</returns>
