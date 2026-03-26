@@ -14,7 +14,7 @@ public static class Extensions
         private IEnumerable<T> AsEnumerable() => MemoryMarshal.ToEnumerable(v);
 
         /// <summary>
-        /// Returns an enumerator for this <see cref="ReadOnlySpan{T}"/>.
+        /// Returns an enumerator for this <see cref="ReadOnlyMemory{T}"/>.
         /// </summary>
         /// <returns></returns>
         public ReadOnlySpan<T>.Enumerator GetEnumerator()
