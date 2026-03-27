@@ -163,7 +163,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         if(!classDeclarationSyntax.Modifiers.Any(m => m.ValueText == "partial"))
         {
             diagnostics.Add(Diagnostic.Create(
-                DiagnosticsCatalogue.PartialClassRequired,
+                DiagnosticsCatalogue.SingletonClassMustBePartial,
                 classDeclarationSyntax.Identifier.GetLocation(),
                 [symbol.Name]
             ));
@@ -178,18 +178,35 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
             if(injectAttr is not null)
             {
-                if(member.DeclaredAccessibility != Accessibility.Private || !member.IsReadOnly)
+                if(member.DeclaredAccessibility != Accessibility.Private)
                 {
                     diagnostics.Add(Diagnostic.Create(
-                        DiagnosticsCatalogue.PrivateReadonlyRequired,
+                        DiagnosticsCatalogue.InjectedFieldMustBePrivate,
                         member.Locations[0],
                         [member.Name, symbol.Name]
                     ));
                 }
-                else
+
+                if(!member.IsReadOnly)
                 {
-                    injectedFields.Add(new InjectedFieldModel(member.Type.ToDisplayString(), member.Name));
+                    diagnostics.Add(Diagnostic.Create(
+                        DiagnosticsCatalogue.InjectedFieldMustBeReadonly,
+                        member.Locations[0],
+                        [member.Name, symbol.Name]
+                    ));
                 }
+
+                var fieldSyntax = member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as VariableDeclaratorSyntax;
+                if(fieldSyntax?.Initializer is not null)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        DiagnosticsCatalogue.InjectedFieldMustNotHaveInitializer,
+                        fieldSyntax?.Initializer?.GetLocation() ?? member.Locations[0],
+                        [member.Name, symbol.Name]
+                    ));
+                }
+
+                injectedFields.Add(new InjectedFieldModel(member.Type.ToDisplayString(), member.Name));
             }
         }
 
