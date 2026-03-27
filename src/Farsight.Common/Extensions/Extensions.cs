@@ -142,7 +142,7 @@ public static class Extensions
         public T? LastOrDefault(Func<T, bool> predicate) => v.AsEnumerable().LastOrDefault(predicate);
 
         /// <summary>
-        /// Returns a <see cref="long"/> that represents how many elements in the memory satisfy the specified predicate.
+        /// Returns a <see cref="UInt64"/> that represents how many elements in the memory satisfy the specified predicate.
         /// </summary>
         /// <param name="predicate">The function used to test each element.</param>
         /// <returns>A number that represents how many elements in the memory satisfy the predicate.</returns>
