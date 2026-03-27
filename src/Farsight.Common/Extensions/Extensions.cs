@@ -341,5 +341,23 @@ public static class Extensions
         /// <param name="predicate">The function used to test each element and its index.</param>
         /// <returns>A sequence that contains elements from the memory that satisfy the predicate.</returns>
         public IEnumerable<T> Where(Func<T, int, bool> predicate) => v.AsEnumerable().Where(predicate);
+
+        /// <summary>
+        /// Merges the memory with another sequence, producing tuples of paired elements.
+        /// </summary>
+        /// <typeparam name="TSecond">The type of the elements of the second sequence.</typeparam>
+        /// <param name="second">The second sequence to merge.</param>
+        /// <returns>A sequence of tuples containing elements from the memory and <paramref name="second"/>.</returns>
+        public IEnumerable<(T First, TSecond Second)> Zip<TSecond>(IEnumerable<TSecond> second) => v.AsEnumerable().Zip(second);
+
+        /// <summary>
+        /// Merges the memory with another sequence using a specified result selector.
+        /// </summary>
+        /// <typeparam name="TSecond">The type of the elements of the second sequence.</typeparam>
+        /// <typeparam name="TResult">The type of the elements of the result sequence.</typeparam>
+        /// <param name="second">The second sequence to merge.</param>
+        /// <param name="resultSelector">The function that specifies how to merge the elements from the two sequences.</param>
+        /// <returns>A sequence that contains merged elements of both sequences.</returns>
+        public IEnumerable<TResult> Zip<TSecond, TResult>(IEnumerable<TSecond> second, Func<T, TSecond, TResult> resultSelector) => v.AsEnumerable().Zip(second, resultSelector);
     }
 }
