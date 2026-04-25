@@ -369,6 +369,21 @@ public static class Extensions
             => memory.ToEnumerable().ToDictionary(keySelector, elementSelector, comparer);
 
         /// <summary>
+        /// Creates a <see cref="HashSet{T}"/> from the elements in the memory.
+        /// </summary>
+        /// <returns>A hash set that contains the elements of the memory.</returns>
+        public HashSet<T> ToHashSet()
+            => [.. memory.ToEnumerable()];
+
+        /// <summary>
+        /// Creates a <see cref="HashSet{T}"/> from the elements in the memory by using a specified <see cref="IEqualityComparer{T}"/>.
+        /// </summary>
+        /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing values.</param>
+        /// <returns>A hash set that contains the elements of the memory.</returns>
+        public HashSet<T> ToHashSet(IEqualityComparer<T>? comparer)
+            => memory.ToEnumerable().ToHashSet(comparer);
+
+        /// <summary>
         /// Creates a <see cref="List{T}"/> from the elements in the memory.
         /// </summary>
         /// <returns>A list that contains the elements of the memory.</returns>
