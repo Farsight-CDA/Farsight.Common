@@ -6,14 +6,14 @@ namespace Farsight.Common.Extensions;
 /// <summary>
 /// Common extensions used in Farsight applications.
 /// </summary>
-public static class Extensions
+public static partial class Extensions
 {
     extension<T>(ReadOnlyMemory<T> memory)
     {
         /// <summary>
         /// Creates an <see cref="IEnumerable{T}"/> view of the given read-only memory buffer.
         /// </summary>
-        /// <returns>An <see cref="IEnumerable{T}"/> view of the given <paramref name="memory" /></returns>
+        /// <returns>An <see cref="IEnumerable{T}"/> view of the given read-only memory buffer.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public IEnumerable<T> ToEnumerable()
             => MemoryMarshal.ToEnumerable(memory);
