@@ -157,6 +157,11 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             return null;
         }
 
+        if(symbol.IsAbstract)
+        {
+            return null;
+        }
+
         var diagnostics = ImmutableArray.CreateBuilder<Diagnostic>();
         var serviceTypes = ImmutableArray.CreateBuilder<ITypeSymbol>();
 
@@ -210,7 +215,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             }
         }
 
-        foreach(var attributeData in symbol.GetAttributes())
+        foreach(var attributeData in GetInheritedServiceTypeAttributes(symbol))
         {
             if(attributeData.AttributeClass is not INamedTypeSymbol attributeClass
                || !SharedTypes.HasMetadataName(attributeClass, SharedTypes.SERVICE_TYPE_ATTRIBUTE))
@@ -257,6 +262,21 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             diagnostics.ToImmutable(),
             isStartup
         );
+    }
+
+    private static IEnumerable<AttributeData> GetInheritedServiceTypeAttributes(INamedTypeSymbol symbol)
+    {
+        for(INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        {
+            foreach(var attributeData in current.GetAttributes())
+            {
+                if(attributeData.AttributeClass is INamedTypeSymbol attributeClass
+                   && SharedTypes.HasMetadataName(attributeClass, SharedTypes.SERVICE_TYPE_ATTRIBUTE))
+                {
+                    yield return attributeData;
+                }
+            }
+        }
     }
 
     private static void Execute(Compilation compilation, ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
