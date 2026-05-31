@@ -120,8 +120,10 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     internal record struct SingletonModel(
         INamedTypeSymbol TypeSymbol,
         ImmutableArray<InjectedFieldModel> InjectedFields,
+        ImmutableArray<InjectedFieldModel> BaseInjectedFields,
         ImmutableArray<ITypeSymbol> ServiceTypes,
         ImmutableArray<Diagnostic> Diagnostics,
+        bool IsAbstract,
         bool IsStartup
     );
     private static SingletonModel? GetSingletonSemanticTarget(GeneratorSyntaxContext context)
@@ -157,7 +159,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             return null;
         }
 
-        if(symbol.IsAbstract)
+        if(!symbol.IsAbstract && symbol.TypeParameters.Length > 0)
         {
             return null;
         }
@@ -174,46 +176,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             ));
         }
 
-        var injectedFields = ImmutableArray.CreateBuilder<InjectedFieldModel>();
-
-        foreach(var member in symbol.GetMembers().OfType<IFieldSymbol>())
-        {
-            var injectAttr = member.GetAttributes()
-                .FirstOrDefault(a => SharedTypes.HasMetadataName(a.AttributeClass, SharedTypes.INJECT_ATTRIBUTE));
-
-            if(injectAttr is not null)
-            {
-                if(member.DeclaredAccessibility != Accessibility.Private)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        DiagnosticsCatalogue.InjectedFieldMustBePrivate,
-                        member.Locations[0],
-                        [member.Name, symbol.Name]
-                    ));
-                }
-
-                if(!member.IsReadOnly)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        DiagnosticsCatalogue.InjectedFieldMustBeReadonly,
-                        member.Locations[0],
-                        [member.Name, symbol.Name]
-                    ));
-                }
-
-                var fieldSyntax = member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as VariableDeclaratorSyntax;
-                if(fieldSyntax?.Initializer is not null)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        DiagnosticsCatalogue.InjectedFieldMustNotHaveInitializer,
-                        fieldSyntax?.Initializer?.GetLocation() ?? member.Locations[0],
-                        [member.Name, symbol.Name]
-                    ));
-                }
-
-                injectedFields.Add(new InjectedFieldModel(member.Type.ToDisplayString(), member.Name));
-            }
-        }
+        var injectedFields = GetInjectedFields(symbol, diagnostics);
 
         foreach(var attributeData in GetInheritedServiceTypeAttributes(symbol))
         {
@@ -257,11 +220,96 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         return new SingletonModel(
             symbol,
-            injectedFields.ToImmutable(),
+            injectedFields,
+            GetBaseInjectedFields(symbol),
             DistinctServiceTypes(serviceTypes),
             diagnostics.ToImmutable(),
+            symbol.IsAbstract,
             isStartup
         );
+    }
+
+    private static ImmutableArray<InjectedFieldModel> GetInjectedFields(
+        INamedTypeSymbol symbol,
+        ImmutableArray<Diagnostic>.Builder? diagnostics = null)
+    {
+        var injectedFields = ImmutableArray.CreateBuilder<InjectedFieldModel>();
+        foreach(var member in symbol.GetMembers().OfType<IFieldSymbol>())
+        {
+            var injectAttr = member.GetAttributes()
+                .FirstOrDefault(a => SharedTypes.HasMetadataName(a.AttributeClass, SharedTypes.INJECT_ATTRIBUTE));
+
+            if(injectAttr is null)
+            {
+                continue;
+            }
+
+            if(diagnostics is not null)
+            {
+                AddInjectedFieldDiagnostics(symbol, member, diagnostics);
+            }
+
+            injectedFields.Add(new InjectedFieldModel(member.Type.ToDisplayString(), member.Name));
+        }
+
+        return injectedFields.ToImmutable();
+    }
+
+    private static void AddInjectedFieldDiagnostics(
+        INamedTypeSymbol symbol,
+        IFieldSymbol member,
+        ImmutableArray<Diagnostic>.Builder diagnostics)
+    {
+        if(member.DeclaredAccessibility != Accessibility.Private)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                DiagnosticsCatalogue.InjectedFieldMustBePrivate,
+                member.Locations[0],
+                [member.Name, symbol.Name]
+            ));
+        }
+
+        if(!member.IsReadOnly)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                DiagnosticsCatalogue.InjectedFieldMustBeReadonly,
+                member.Locations[0],
+                [member.Name, symbol.Name]
+            ));
+        }
+
+        var fieldSyntax = member.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as VariableDeclaratorSyntax;
+        if(fieldSyntax?.Initializer is not null)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                DiagnosticsCatalogue.InjectedFieldMustNotHaveInitializer,
+                fieldSyntax?.Initializer?.GetLocation() ?? member.Locations[0],
+                [member.Name, symbol.Name]
+            ));
+        }
+    }
+
+    private static ImmutableArray<InjectedFieldModel> GetBaseInjectedFields(INamedTypeSymbol symbol)
+    {
+        var baseTypes = new Stack<INamedTypeSymbol>();
+        for(var baseType = symbol.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.SINGLETON)
+               || SharedTypes.HasMetadataName(baseType, SharedTypes.FARSIGHT_STARTUP))
+            {
+                break;
+            }
+
+            baseTypes.Push(baseType);
+        }
+
+        var injectedFields = new List<InjectedFieldModel>();
+        while(baseTypes.Count > 0)
+        {
+            injectedFields.AddRange(GetInjectedFields(baseTypes.Pop()));
+        }
+
+        return [.. injectedFields];
     }
 
     private static IEnumerable<AttributeData> GetInheritedServiceTypeAttributes(INamedTypeSymbol symbol)
@@ -389,28 +437,31 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 continue;
             }
 
-            string serviceName = singleton.TypeSymbol.ToDisplayString();
-            serviceRegistrations.AppendLine(
-                $"""
-                builder.Services.AddSingleton<{serviceName}>();
-                """
-            );
-
-            if(!singleton.IsStartup)
+            if(!singleton.IsAbstract)
             {
+                string serviceName = singleton.TypeSymbol.ToDisplayString();
                 serviceRegistrations.AppendLine(
                     $"""
-                    builder.Services.AddSingleton<Singleton, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
-                    """);
-            }
+                    builder.Services.AddSingleton<{serviceName}>();
+                    """
+                );
 
-            foreach(var serviceType in singleton.ServiceTypes)
-            {
-                string serviceTypeName = serviceType.ToDisplayString();
-                serviceRegistrations.AppendLine(
-                    $"""
-                    builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
-                    """);
+                if(!singleton.IsStartup)
+                {
+                    serviceRegistrations.AppendLine(
+                        $"""
+                        builder.Services.AddSingleton<Singleton, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
+                        """);
+                }
+
+                foreach(var serviceType in singleton.ServiceTypes)
+                {
+                    string serviceTypeName = serviceType.ToDisplayString();
+                    serviceRegistrations.AppendLine(
+                        $"""
+                        builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
+                        """);
+                }
             }
 
             GeneratePaddingConstructor(singleton, context);
@@ -557,19 +608,24 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
     private static void GeneratePaddingConstructor(SingletonModel singleton, SourceProductionContext context)
     {
-        var fields = singleton.InjectedFields;
+        string typeDeclarationName = singleton.TypeSymbol.ToDisplayString(new SymbolDisplayFormat(
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameOnly,
+            genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters));
+        string typeModifier = singleton.IsAbstract ? "abstract" : "sealed";
 
         var parametersList = new List<string>
         {
             "System.IServiceProvider provider",
-            $"Microsoft.Extensions.Logging.ILogger<{singleton.TypeSymbol.Name}> logger",
+            $"Microsoft.Extensions.Logging.ILogger<{typeDeclarationName}> logger",
             "Microsoft.Extensions.Hosting.IHostApplicationLifetime lifetime"
         };
-        parametersList.AddRange(fields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
+        parametersList.AddRange(singleton.BaseInjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
+        parametersList.AddRange(singleton.InjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
         string parameters = String.Join(", ", parametersList);
+        string baseArguments = String.Join(", ", new[] { "provider", "logger", "lifetime" }.Concat(singleton.BaseInjectedFields.Select(f => f.Name.TrimStart('_'))));
 
         var assignments = new StringBuilder();
-        foreach(var field in fields)
+        foreach(var field in singleton.InjectedFields)
         {
             assignments.AppendLine($"this.{field.Name} = {field.Name.TrimStart('_')};");
         }
@@ -578,9 +634,9 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             ? $$"""
                 #nullable enable
 
-                sealed partial class {{singleton.TypeSymbol.Name}}
+                {{typeModifier}} partial class {{typeDeclarationName}}
                 {
-                    public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
+                    public {{singleton.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
                     {
                 {{CodeUtils.Indent(assignments.ToString(), 8)}}
                     }
@@ -591,9 +647,9 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
                 namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
                 {
-                    sealed partial class {{singleton.TypeSymbol.Name}}
+                    {{typeModifier}} partial class {{typeDeclarationName}}
                     {
-                        public {{singleton.TypeSymbol.Name}}({{parameters}}) : base(provider, logger, lifetime)
+                        public {{singleton.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
                         {
                 {{CodeUtils.Indent(assignments.ToString(), 12)}}
                         }
@@ -616,6 +672,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 var merged = existing with
                 {
                     InjectedFields = [.. existing.InjectedFields.Concat(singleton.InjectedFields).Distinct()],
+                    BaseInjectedFields = [.. existing.BaseInjectedFields.Concat(singleton.BaseInjectedFields).Distinct()],
                     ServiceTypes = DistinctServiceTypes(existing.ServiceTypes.Concat(singleton.ServiceTypes)),
                     Diagnostics = [.. existing.Diagnostics, .. singleton.Diagnostics]
                 };
