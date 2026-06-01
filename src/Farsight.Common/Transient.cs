@@ -20,4 +20,9 @@ public abstract class Transient(IServiceProvider provider, ILogger logger, IHost
     /// The logger associated with this transient.
     /// </summary>
     protected readonly ILogger _logger = logger;
+
+    /// <summary>
+    /// The application lifetime used to coordinate shutdown.
+    /// </summary>
+    protected readonly IHostApplicationLifetime _lifetime = lifetime;
 }
