@@ -10,7 +10,7 @@ A .NET 10 library providing shared runtime types and a Roslyn incremental source
 
 ## Features
 
-- **Compile-time service registration** — Annotated singletons and options are registered via source generation
+- **Compile-time service registration** — Generated services and options are registered via source generation
 - **Zero runtime reflection** — All discovery happens at build time
 - **AOT compatible** — No reflection-based code paths; safe for native AOT publishing
 - **Strict configuration binding** — Unknown configuration keys fail at startup
@@ -79,6 +79,7 @@ await builder.Build().RunAsync();
 | `[ConfigOption]` | Binds config section → options class with validation |
 | `[ConfigOption<TValidator>]` | Adds FluentValidation support |
 | `Singleton` (base class) | Registers as singleton + generates constructor injection |
+| `Transient` (base class) | Registers as transient + generates constructor injection |
 | `[Inject]` | Auto-wires dependencies into private fields |
 
 ---
@@ -108,6 +109,21 @@ public sealed partial class MyService : Singleton
 ---
 
 ## 🔧 Advanced Configuration
+
+### Transient Services
+
+```csharp
+using Farsight.Common;
+
+[ServiceType<IMessageFormatter>]
+public sealed partial class MessageFormatter : Transient, IMessageFormatter
+{
+    [Inject]
+    private readonly AppOptions _options;
+}
+```
+
+The generated registration uses `AddTransient` for both the concrete type and any `[ServiceType<T>]` interfaces.
 
 ### FluentValidation Support
 

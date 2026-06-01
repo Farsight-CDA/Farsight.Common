@@ -4,10 +4,10 @@ namespace Farsight.Common.Diagnostics;
 
 internal static class DiagnosticsCatalogue
 {
-    public static readonly DiagnosticDescriptor SingletonClassMustBePartial = new DiagnosticDescriptor(
+    public static readonly DiagnosticDescriptor ServiceClassMustBePartial = new DiagnosticDescriptor(
         id: "FC001",
-        title: "Singleton class must be partial",
-        messageFormat: "The class '{0}' inherits from Singleton and must be declared as partial to support constructor injection generation",
+        title: "Generated service class must be partial",
+        messageFormat: "The class '{0}' inherits from a generated service base type and must be declared as partial to support constructor injection generation",
         category: RuleCategories.USAGE,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true
@@ -51,7 +51,7 @@ internal static class DiagnosticsCatalogue
 
     public static readonly DiagnosticDescriptor ServiceTypeNotImplemented = new DiagnosticDescriptor(
         id: "FC202",
-        title: "ServiceType must be implemented by singleton",
+        title: "ServiceType must be implemented by service",
         messageFormat: "The class '{0}' must implement the interface '{1}' specified by ServiceTypeAttribute",
         category: RuleCategories.USAGE,
         DiagnosticSeverity.Error,

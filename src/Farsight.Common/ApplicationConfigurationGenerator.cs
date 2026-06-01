@@ -27,15 +27,15 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             .Select(static (m, _) => m!.Value)
             .Collect();
 
-        var singletons = context.SyntaxProvider
+        var generatedServices = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (s, _) => s is ClassDeclarationSyntax,
-                transform: static (ctx, _) => GetSingletonSemanticTarget(ctx))
+                transform: static (ctx, _) => GetGeneratedServiceSemanticTarget(ctx))
             .Where(static m => m is not null)
             .Select(static (m, _) => m!.Value)
             .Collect();
 
-        var combined = configOptions.Combine(singletons);
+        var combined = configOptions.Combine(generatedServices);
         var generationInput = context.CompilationProvider.Combine(combined);
 
         context.RegisterSourceOutput(generationInput,
@@ -117,16 +117,23 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
     }
 
     internal record struct InjectedFieldModel(string TypeFullName, string Name);
-    internal record struct SingletonModel(
+    internal enum GeneratedServiceKind
+    {
+        Singleton,
+        Transient,
+        Startup
+    }
+
+    internal record struct GeneratedServiceModel(
         INamedTypeSymbol TypeSymbol,
         ImmutableArray<InjectedFieldModel> InjectedFields,
         ImmutableArray<InjectedFieldModel> BaseInjectedFields,
         ImmutableArray<ITypeSymbol> ServiceTypes,
         ImmutableArray<Diagnostic> Diagnostics,
         bool IsAbstract,
-        bool IsStartup
+        GeneratedServiceKind Kind
     );
-    private static SingletonModel? GetSingletonSemanticTarget(GeneratorSyntaxContext context)
+    private static GeneratedServiceModel? GetGeneratedServiceSemanticTarget(GeneratorSyntaxContext context)
     {
         var classDeclarationSyntax = (ClassDeclarationSyntax) context.Node;
         if(context.SemanticModel.GetDeclaredSymbol(classDeclarationSyntax) is not INamedTypeSymbol symbol)
@@ -136,6 +143,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
         var baseType = symbol.BaseType;
         bool isSingleton = false;
+        bool isTransient = false;
         bool isStartup = false;
 
         while(baseType is not null)
@@ -143,6 +151,11 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             if(SharedTypes.HasMetadataName(baseType, SharedTypes.SINGLETON))
             {
                 isSingleton = true;
+                break;
+            }
+            if(SharedTypes.HasMetadataName(baseType, SharedTypes.TRANSIENT))
+            {
+                isTransient = true;
                 break;
             }
             if(SharedTypes.HasMetadataName(baseType, SharedTypes.FARSIGHT_STARTUP))
@@ -154,7 +167,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             baseType = baseType.BaseType;
         }
 
-        if(!isSingleton && !isStartup)
+        if(!isSingleton && !isTransient && !isStartup)
         {
             return null;
         }
@@ -170,7 +183,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         if(!classDeclarationSyntax.Modifiers.Any(m => m.ValueText == "partial"))
         {
             diagnostics.Add(Diagnostic.Create(
-                DiagnosticsCatalogue.SingletonClassMustBePartial,
+                DiagnosticsCatalogue.ServiceClassMustBePartial,
                 classDeclarationSyntax.Identifier.GetLocation(),
                 [symbol.Name]
             ));
@@ -218,14 +231,18 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             serviceTypes.Add(serviceType);
         }
 
-        return new SingletonModel(
+        var kind = isStartup
+            ? GeneratedServiceKind.Startup
+            : isTransient ? GeneratedServiceKind.Transient : GeneratedServiceKind.Singleton;
+
+        return new GeneratedServiceModel(
             symbol,
             injectedFields,
             GetBaseInjectedFields(symbol),
             DistinctServiceTypes(serviceTypes),
             diagnostics.ToImmutable(),
             symbol.IsAbstract,
-            isStartup
+            kind
         );
     }
 
@@ -295,6 +312,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         for(var baseType = symbol.BaseType; baseType is not null; baseType = baseType.BaseType)
         {
             if(SharedTypes.HasMetadataName(baseType, SharedTypes.SINGLETON)
+               || SharedTypes.HasMetadataName(baseType, SharedTypes.TRANSIENT)
                || SharedTypes.HasMetadataName(baseType, SharedTypes.FARSIGHT_STARTUP))
             {
                 break;
@@ -314,7 +332,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
     private static IEnumerable<AttributeData> GetInheritedServiceTypeAttributes(INamedTypeSymbol symbol)
     {
-        for(INamedTypeSymbol? current = symbol; current is not null; current = current.BaseType)
+        for(var current = symbol; current is not null; current = current.BaseType)
         {
             foreach(var attributeData in current.GetAttributes())
             {
@@ -327,7 +345,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         }
     }
 
-    private static void Execute(Compilation compilation, ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<SingletonModel> singletons, SourceProductionContext context)
+    private static void Execute(Compilation compilation, ImmutableArray<ConfigOptionModel> configOptions, ImmutableArray<GeneratedServiceModel> generatedServices, SourceProductionContext context)
     {
         var optionRegistrations = new StringBuilder();
         var optionValidatorTypes = new StringBuilder();
@@ -425,28 +443,31 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             }
         }
 
-        foreach(var singleton in GetUniqueSingletons(singletons))
+        foreach(var service in GetUniqueGeneratedServices(generatedServices))
         {
-            foreach(var diagnostic in singleton.Diagnostics)
+            foreach(var diagnostic in service.Diagnostics)
             {
                 context.ReportDiagnostic(diagnostic);
             }
 
-            if(singleton.Diagnostics.Length > 0)
+            if(service.Diagnostics.Length > 0)
             {
                 continue;
             }
 
-            if(!singleton.IsAbstract)
+            if(!service.IsAbstract)
             {
-                string serviceName = singleton.TypeSymbol.ToDisplayString();
+                string serviceName = service.TypeSymbol.ToDisplayString();
+                string registrationMethod = service.Kind == GeneratedServiceKind.Transient
+                    ? "AddTransient"
+                    : "AddSingleton";
                 serviceRegistrations.AppendLine(
                     $"""
-                    builder.Services.AddSingleton<{serviceName}>();
+                    builder.Services.{registrationMethod}<{serviceName}>();
                     """
                 );
 
-                if(!singleton.IsStartup)
+                if(service.Kind == GeneratedServiceKind.Singleton)
                 {
                     serviceRegistrations.AppendLine(
                         $"""
@@ -454,17 +475,17 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                         """);
                 }
 
-                foreach(var serviceType in singleton.ServiceTypes)
+                foreach(var serviceType in service.ServiceTypes)
                 {
                     string serviceTypeName = serviceType.ToDisplayString();
                     serviceRegistrations.AppendLine(
                         $"""
-                        builder.Services.AddSingleton<{serviceTypeName}, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
+                        builder.Services.{registrationMethod}<{serviceTypeName}, {serviceName}>(provider => global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{serviceName}>(provider));
                         """);
                 }
             }
 
-            GeneratePaddingConstructor(singleton, context);
+            GeneratePaddingConstructor(service, context);
         }
 
         var registrationCalls = new StringBuilder();
@@ -606,12 +627,12 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static void GeneratePaddingConstructor(SingletonModel singleton, SourceProductionContext context)
+    private static void GeneratePaddingConstructor(GeneratedServiceModel service, SourceProductionContext context)
     {
-        string typeDeclarationName = singleton.TypeSymbol.ToDisplayString(new SymbolDisplayFormat(
+        string typeDeclarationName = service.TypeSymbol.ToDisplayString(new SymbolDisplayFormat(
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameOnly,
             genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters));
-        string typeModifier = singleton.IsAbstract ? "abstract" : "sealed";
+        string typeModifier = service.IsAbstract ? "abstract" : "sealed";
 
         var parametersList = new List<string>
         {
@@ -619,24 +640,24 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             $"Microsoft.Extensions.Logging.ILogger<{typeDeclarationName}> logger",
             "Microsoft.Extensions.Hosting.IHostApplicationLifetime lifetime"
         };
-        parametersList.AddRange(singleton.BaseInjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
-        parametersList.AddRange(singleton.InjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
+        parametersList.AddRange(service.BaseInjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
+        parametersList.AddRange(service.InjectedFields.Select(f => $"{f.TypeFullName} {f.Name.TrimStart('_')}"));
         string parameters = String.Join(", ", parametersList);
-        string baseArguments = String.Join(", ", new[] { "provider", "logger", "lifetime" }.Concat(singleton.BaseInjectedFields.Select(f => f.Name.TrimStart('_'))));
+        string baseArguments = String.Join(", ", new[] { "provider", "logger", "lifetime" }.Concat(service.BaseInjectedFields.Select(f => f.Name.TrimStart('_'))));
 
         var assignments = new StringBuilder();
-        foreach(var field in singleton.InjectedFields)
+        foreach(var field in service.InjectedFields)
         {
             assignments.AppendLine($"this.{field.Name} = {field.Name.TrimStart('_')};");
         }
 
-        string source = singleton.TypeSymbol.ContainingNamespace.IsGlobalNamespace
+        string source = service.TypeSymbol.ContainingNamespace.IsGlobalNamespace
             ? $$"""
                 #nullable enable
 
                 {{typeModifier}} partial class {{typeDeclarationName}}
                 {
-                    public {{singleton.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
+                    public {{service.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
                     {
                 {{CodeUtils.Indent(assignments.ToString(), 8)}}
                     }
@@ -645,11 +666,11 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
             : $$"""
                 #nullable enable
 
-                namespace {{singleton.TypeSymbol.ContainingNamespace.ToDisplayString()}}
+                namespace {{service.TypeSymbol.ContainingNamespace.ToDisplayString()}}
                 {
                     {{typeModifier}} partial class {{typeDeclarationName}}
                     {
-                        public {{singleton.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
+                        public {{service.TypeSymbol.Name}}({{parameters}}) : base({{baseArguments}})
                         {
                 {{CodeUtils.Indent(assignments.ToString(), 12)}}
                         }
@@ -657,33 +678,33 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                 }
                 """;
 
-        string hintName = BuildSingletonHintName(singleton.TypeSymbol);
+        string hintName = BuildGeneratedServiceHintName(service.TypeSymbol);
         context.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
     }
 
-    private static IEnumerable<SingletonModel> GetUniqueSingletons(ImmutableArray<SingletonModel> singletons)
+    private static IEnumerable<GeneratedServiceModel> GetUniqueGeneratedServices(ImmutableArray<GeneratedServiceModel> generatedServices)
     {
-        var uniqueSingletons = new Dictionary<INamedTypeSymbol, SingletonModel>(SymbolEqualityComparer.Default);
+        var uniqueServices = new Dictionary<INamedTypeSymbol, GeneratedServiceModel>(SymbolEqualityComparer.Default);
 
-        foreach(var singleton in singletons)
+        foreach(var service in generatedServices)
         {
-            if(uniqueSingletons.TryGetValue(singleton.TypeSymbol, out var existing))
+            if(uniqueServices.TryGetValue(service.TypeSymbol, out var existing))
             {
                 var merged = existing with
                 {
-                    InjectedFields = [.. existing.InjectedFields.Concat(singleton.InjectedFields).Distinct()],
-                    BaseInjectedFields = [.. existing.BaseInjectedFields.Concat(singleton.BaseInjectedFields).Distinct()],
-                    ServiceTypes = DistinctServiceTypes(existing.ServiceTypes.Concat(singleton.ServiceTypes)),
-                    Diagnostics = [.. existing.Diagnostics, .. singleton.Diagnostics]
+                    InjectedFields = [.. existing.InjectedFields.Concat(service.InjectedFields).Distinct()],
+                    BaseInjectedFields = [.. existing.BaseInjectedFields.Concat(service.BaseInjectedFields).Distinct()],
+                    ServiceTypes = DistinctServiceTypes(existing.ServiceTypes.Concat(service.ServiceTypes)),
+                    Diagnostics = [.. existing.Diagnostics, .. service.Diagnostics]
                 };
-                uniqueSingletons[singleton.TypeSymbol] = merged;
+                uniqueServices[service.TypeSymbol] = merged;
                 continue;
             }
 
-            uniqueSingletons[singleton.TypeSymbol] = singleton;
+            uniqueServices[service.TypeSymbol] = service;
         }
 
-        return uniqueSingletons.Values;
+        return uniqueServices.Values;
     }
 
     private static IEnumerable<ConfigOptionModel> GetUniqueConfigOptions(ImmutableArray<ConfigOptionModel> configOptions)
@@ -707,7 +728,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         return uniqueConfigOptions.Values;
     }
 
-    private static string BuildSingletonHintName(INamedTypeSymbol typeSymbol)
+    private static string BuildGeneratedServiceHintName(INamedTypeSymbol typeSymbol)
     {
         string typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var hintNameBuilder = new StringBuilder(typeName.Length + 5);

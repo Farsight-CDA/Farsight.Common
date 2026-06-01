@@ -13,6 +13,7 @@ internal static class SharedTypes
     public const string INJECT_ATTRIBUTE = NAMESPACE + ".InjectAttribute";
     public const string SERVICE_TYPE_ATTRIBUTE = NAMESPACE + ".ServiceTypeAttribute`1";
     public const string SINGLETON = NAMESPACE + ".Singleton";
+    public const string TRANSIENT = NAMESPACE + ".Transient";
     public const string FARSIGHT_STARTUP = STARTUP_NAMESPACE + ".FarsightStartup";
 
     public const string SECTION_NAME_PROPERTY = "SectionName";

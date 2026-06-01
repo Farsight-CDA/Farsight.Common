@@ -22,11 +22,6 @@ public abstract class Singleton(IServiceProvider provider, ILogger logger, IHost
     protected readonly ILogger _logger = logger;
 
     /// <summary>
-    /// The application lifetime used to coordinate shutdown.
-    /// </summary>
-    protected readonly IHostApplicationLifetime _lifetime = lifetime;
-
-    /// <summary>
     /// Performs pre-initialization setup work.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for cooperative shutdown.</param>
