@@ -15,8 +15,8 @@ internal static class DiagnosticsCatalogue
 
     public static readonly DiagnosticDescriptor InjectedFieldMustBePrivate = new DiagnosticDescriptor(
         id: "FC101",
-        title: "Injected field must be private",
-        messageFormat: "The field '{0}' in class '{1}' is marked with InjectAttribute but is not private",
+        title: "Injected field must be private or protected",
+        messageFormat: "The field '{0}' in class '{1}' is marked with InjectAttribute but is not private or protected",
         category: RuleCategories.USAGE,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true

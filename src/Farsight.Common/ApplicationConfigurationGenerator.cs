@@ -277,7 +277,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
         IFieldSymbol member,
         ImmutableArray<Diagnostic>.Builder diagnostics)
     {
-        if(member.DeclaredAccessibility != Accessibility.Private)
+        if(member.DeclaredAccessibility is not Accessibility.Private and not Accessibility.Protected)
         {
             diagnostics.Add(Diagnostic.Create(
                 DiagnosticsCatalogue.InjectedFieldMustBePrivate,
