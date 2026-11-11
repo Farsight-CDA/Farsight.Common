@@ -11,6 +11,15 @@ public static partial class Extensions
     extension<T>(ReadOnlyMemory<T> memory)
     {
         /// <summary>
+        /// Gets a read-only reference to the element at the specified index.
+        /// </summary>
+        /// <param name="index">The zero-based index of the element.</param>
+        /// <returns>A read-only reference to the element at the specified index.</returns>
+        /// <exception cref="IndexOutOfRangeException">The index is outside the bounds of the memory.</exception>
+        public ref readonly T this[int index]
+            => ref memory.Span[index];
+
+        /// <summary>
         /// Creates an <see cref="IEnumerable{T}"/> view of the given read-only memory buffer.
         /// </summary>
         /// <returns>An <see cref="IEnumerable{T}"/> view of the given read-only memory buffer.</returns>
