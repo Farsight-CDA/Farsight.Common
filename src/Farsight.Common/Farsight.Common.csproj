@@ -5,6 +5,7 @@
 		<ImplicitUsings>true</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
+		<Features>runtime-async=on</Features>
 		<RootNamespace>Farsight.Common</RootNamespace>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
