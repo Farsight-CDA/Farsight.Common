@@ -15,7 +15,7 @@
 		<Authors>Playwo</Authors>
 		<Description>A library including common utilities and a source generator used by Farsight.</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<Version>1.2.0</Version>
+		<Version>1.3.0</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
