@@ -1,10 +1,10 @@
 # Farsight.Common
 
 [![NuGet](https://img.shields.io/nuget/v/Farsight.Common.svg)](https://www.nuget.org/packages/Farsight.Common/)
-[![.NET](https://img.shields.io/badge/.NET-10.0-blueviolet)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-11.0-blueviolet)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A .NET 10 library providing shared runtime types and a Roslyn incremental source generator for Farsight-style hosted applications. The generator discovers annotated types and auto-registers services and configuration bindings at compile time, eliminating runtime reflection and manual DI registration. Fully compatible with AOT compilation.
+A .NET 11 library providing shared runtime types and a Roslyn incremental source generator for Farsight-style hosted applications. The generator discovers annotated types and auto-registers services and configuration bindings at compile time, eliminating runtime reflection and manual DI registration. Fully compatible with AOT compilation.
 
 ---
 
@@ -153,7 +153,7 @@ builder.AddApplicationOptions(); // Only config, no services
 
 ## 📦 Requirements
 
-- .NET 10.0+
+- .NET 11.0+
 - The source generator is included automatically
 
 ---
