@@ -373,7 +373,7 @@ public static partial class Extensions
         /// </summary>
         /// <returns>A hash set that contains the elements of the memory.</returns>
         public HashSet<T> ToHashSet()
-            => [.. memory.ToEnumerable()];
+            => [with(capacity: memory.Length), .. memory.Span];
 
         /// <summary>
         /// Creates a <see cref="HashSet{T}"/> from the elements in the memory by using a specified <see cref="IEqualityComparer{T}"/>.
@@ -381,14 +381,14 @@ public static partial class Extensions
         /// <param name="comparer">The <see cref="IEqualityComparer{T}"/> implementation to use when comparing values.</param>
         /// <returns>A hash set that contains the elements of the memory.</returns>
         public HashSet<T> ToHashSet(IEqualityComparer<T>? comparer)
-            => memory.ToEnumerable().ToHashSet(comparer);
+            => [with(capacity: memory.Length, comparer: comparer), .. memory.Span];
 
         /// <summary>
         /// Creates a <see cref="List{T}"/> from the elements in the memory.
         /// </summary>
         /// <returns>A list that contains the elements of the memory.</returns>
         public List<T> ToList()
-            => [.. memory.ToEnumerable()];
+            => [.. memory.Span];
 
         /// <summary>
         /// Filters the elements of the memory based on the specified predicate.
