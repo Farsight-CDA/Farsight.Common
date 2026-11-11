@@ -402,7 +402,7 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
 
                 optionValidatorTypes.AppendLine(
                     $$"""
-                    internal sealed class {{classOption.ValidatorHelperTypeName}} : global::Microsoft.Extensions.Options.IValidateOptions<{{classOption.FullName}}>
+                    internal sealed class {{classOption.ValidatorHelperTypeName}} : global::Microsoft.Extensions.Options.IAsyncValidateOptions<{{classOption.FullName}}>
                     {
                         public global::Microsoft.Extensions.Options.ValidateOptionsResult Validate(string? name, {{classOption.FullName}} options)
                         {
@@ -413,7 +413,36 @@ public class ApplicationConfigurationGenerator : IIncrementalGenerator
                                 return global::Microsoft.Extensions.Options.ValidateOptionsResult.Skip;
                             }
 
-                            var validationResult = new {{classOption.ValidatorFullName}}().Validate(options);
+                            try
+                            {
+                                return ToOptionsResult(new {{classOption.ValidatorFullName}}().Validate(options));
+                            }
+                            catch(global::FluentValidation.AsyncValidatorInvokedSynchronouslyException)
+                            {
+                                return global::Microsoft.Extensions.Options.ValidateOptionsResult.Fail(
+                                    "This FluentValidation validator requires asynchronous validation. Access these options after host startup validation completes.");
+                            }
+                        }
+
+                        public async global::System.Threading.Tasks.Task<global::Microsoft.Extensions.Options.ValidateOptionsResult> ValidateAsync(
+                            string? name,
+                            {{classOption.FullName}} options,
+                            global::System.Threading.CancellationToken cancellationToken = default
+                        )
+                        {
+                            _ = name;
+
+                            if(options is null)
+                            {
+                                return global::Microsoft.Extensions.Options.ValidateOptionsResult.Skip;
+                            }
+
+                            var validationResult = await new {{classOption.ValidatorFullName}}().ValidateAsync(options, cancellationToken).ConfigureAwait(false);
+                            return ToOptionsResult(validationResult);
+                        }
+
+                        private static global::Microsoft.Extensions.Options.ValidateOptionsResult ToOptionsResult(global::FluentValidation.Results.ValidationResult validationResult)
+                        {
                             if(validationResult.IsValid)
                             {
                                 return global::Microsoft.Extensions.Options.ValidateOptionsResult.Success;

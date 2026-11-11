@@ -14,7 +14,7 @@ A .NET 11 library providing shared runtime types and a Roslyn incremental source
 - **Zero runtime reflection** — All discovery happens at build time
 - **AOT compatible** — No reflection-based code paths; safe for native AOT publishing
 - **Strict configuration binding** — Unknown configuration keys fail at startup
-- **Validation support** — Data annotations and FluentValidation integration
+- **Validation support** — Synchronous and asynchronous DataAnnotations and FluentValidation rules, validated during host startup
 
 ---
 

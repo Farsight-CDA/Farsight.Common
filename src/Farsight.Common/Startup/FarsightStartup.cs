@@ -27,7 +27,13 @@ public abstract class FarsightStartup(IServiceProvider provider, ILogger logger,
     /// </summary>
     protected readonly IHostApplicationLifetime _lifetime = lifetime;
 
-    private readonly ISingleton[] _singletons = [.. provider.GetServices<Singleton>().Select(x => (ISingleton) x)];
+    private ISingleton[] _singletons = [];
+
+    Task IHostedLifecycleService.StartingAsync(CancellationToken cancellationToken)
+    {
+        _singletons = [.. _provider.GetServices<Singleton>()];
+        return StartingAsync(cancellationToken);
+    }
 
     /// <summary>
     /// Runs setup for all discovered singletons in parallel.
@@ -74,7 +80,7 @@ public abstract class FarsightStartup(IServiceProvider provider, ILogger logger,
         })));
 
     /// <summary>
-    /// Called before the host starts.
+    /// Called before the host starts, after options validation and singleton resolution have completed.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for cooperative shutdown.</param>
     /// <returns>A completed task by default.</returns>
